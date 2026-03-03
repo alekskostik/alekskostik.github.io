@@ -1,59 +1,1253 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
-    <script src="https://cdn.jsdelivr.net/npm/phaser@3.15.1/dist/phaser-arcade-physics.min.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Стандарт процесса разработки</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Manrope:wght@300;400;500;600;700;800&display=swap');
+
+  :root {
+    --bg: #0d0f14;
+    --surface: #141720;
+    --border: #1e2430;
+    --border-light: #252d3d;
+    --text: #e2e8f0;
+    --muted: #6b7a99;
+    --blue: #3b82f6;
+    --cyan: #06b6d4;
+    --green: #10b981;
+    --amber: #f59e0b;
+    --purple: #8b5cf6;
+    --rose: #f43f5e;
+    --pink: #e879f9;
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'Manrope', sans-serif;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:var(--sans); line-height:1.6; min-height:100vh; }
+
+  header { border-bottom:1px solid var(--border); padding:1.5rem 0; background:linear-gradient(180deg,#0a0c10 0%,var(--bg) 100%); }
+  .hdr { max-width:1100px; margin:0 auto; padding:0 2rem; display:flex; align-items:center; justify-content:space-between; }
+  .logo { display:flex; align-items:center; gap:0.9rem; }
+  .logo-box { width:38px; height:38px; border:2px solid var(--blue); border-radius:9px; display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-size:0.68rem; font-weight:700; color:var(--blue); }
+  .logo-txt { font-family:var(--mono); font-size:0.7rem; color:var(--muted); letter-spacing:0.1em; text-transform:uppercase; }
+  .ver { font-family:var(--mono); font-size:0.65rem; color:var(--green); border:1px solid var(--green); padding:0.15rem 0.5rem; border-radius:4px; }
+
+  .hero { max-width:1100px; margin:0 auto; padding:3rem 2rem 2rem; border-bottom:1px solid var(--border); }
+  .hero-tag { display:inline-block; font-family:var(--mono); font-size:0.65rem; color:var(--cyan); letter-spacing:0.14em; text-transform:uppercase; margin-bottom:0.9rem; }
+  h1 { font-size:clamp(1.7rem,3.5vw,2.8rem); font-weight:800; line-height:1.15; letter-spacing:-0.03em; margin-bottom:0.8rem; }
+  h1 span { color:var(--blue); }
+  .hero-sub { font-size:0.95rem; color:var(--muted); max-width:600px; line-height:1.7; }
+
+  .tabs { max-width:1100px; margin:0 auto; padding:0 2rem; display:flex; border-bottom:1px solid var(--border); overflow-x:auto; overflow-y:hidden; }
+  .tb { padding:0.85rem 1.2rem; font-family:var(--mono); font-size:0.7rem; color:var(--muted); letter-spacing:0.07em; background:none; border:none; border-bottom:2px solid transparent; margin-bottom:-1px; cursor:pointer; transition:all 0.2s; text-transform:uppercase; white-space:nowrap; flex-shrink:0; }
+  .tb:hover { color:var(--text); }
+  .tb.active { color:var(--blue); border-bottom-color:var(--blue); }
+
+  .wrap { max-width:1100px; margin:0 auto; padding:2rem; }
+  .panel { display:none; }
+  .panel.active { display:block; }
+
+  /* flow strip */
+  .fstrip { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:1.1rem 1.4rem; display:flex; align-items:center; flex-wrap:wrap; gap:0; margin-bottom:2rem; }
+  .fn { display:flex; flex-direction:column; align-items:center; gap:0.2rem; padding:0.35rem 0.65rem; }
+  .fn-n { font-family:var(--mono); font-size:0.56rem; opacity:0.4; letter-spacing:0.06em; }
+  .fn-l { font-family:var(--mono); font-size:0.64rem; font-weight:600; letter-spacing:0.03em; text-align:center; line-height:1.3; }
+  .farr { color:var(--border-light); font-size:0.9rem; padding:0 0.05rem; }
+
+  /* phases */
+  .phases { display:flex; flex-direction:column; }
+  .pr { display:grid; grid-template-columns:185px 1fr; position:relative; }
+  .pr:not(:last-child)::after { content:''; position:absolute; left:91px; top:100%; width:2px; height:18px; background:var(--border-light); z-index:1; }
+  .pl { padding:1rem 1.8rem 1rem 0; display:flex; flex-direction:column; align-items:flex-end; gap:0.2rem; position:relative; }
+  .pl::after { content:''; position:absolute; right:-1px; top:50%; transform:translateY(-50%); width:13px; height:13px; border-radius:50%; border:2px solid currentColor; background:var(--bg); z-index:2; }
+  .pn { font-family:var(--mono); font-size:0.56rem; opacity:0.4; letter-spacing:0.07em; }
+  .pt { font-size:0.8rem; font-weight:700; text-align:right; letter-spacing:-0.01em; }
+  .pb { border-left:2px solid var(--border-light); padding:1rem 0 1rem 1.7rem; display:flex; flex-direction:column; gap:0.5rem; }
+  .arts { display:flex; flex-wrap:wrap; gap:0.35rem; }
+  .art { display:inline-flex; align-items:center; gap:0.3rem; padding:0.2rem 0.55rem; border-radius:5px; font-family:var(--mono); font-size:0.64rem; font-weight:600; border:1px solid currentColor; opacity:0.8; }
+  .ad { width:4px; height:4px; border-radius:50%; background:currentColor; }
+  .pd { font-size:0.8rem; color:var(--muted); line-height:1.6; }
+
+  .c1{color:var(--purple);} .c2{color:var(--blue);} .c3{color:var(--cyan);}
+  .c4{color:var(--amber);} .c5{color:var(--green);} .c6{color:var(--rose);} .c7{color:var(--pink);}
+
+  /* rules */
+  .sec { margin:2rem 0; }
+  .sec-h { display:flex; align-items:center; gap:0.65rem; margin-bottom:1.1rem; padding-bottom:0.65rem; border-bottom:1px solid var(--border); }
+  .sec-n { font-family:var(--mono); font-size:0.65rem; color:var(--muted); background:var(--surface); border:1px solid var(--border-light); padding:0.15rem 0.45rem; border-radius:4px; }
+  h2 { font-size:1rem; font-weight:700; letter-spacing:-0.02em; }
+  .rgrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(285px,1fr)); gap:0.85rem; }
+  .rc { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:1rem; position:relative; overflow:hidden; transition:border-color 0.2s; }
+  .rc:hover { border-color:var(--border-light); }
+  .rc::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:var(--ac,var(--blue)); }
+  .rid { font-family:var(--mono); font-size:0.6rem; color:var(--muted); margin-bottom:0.35rem; }
+  .rt { font-size:0.84rem; font-weight:700; margin-bottom:0.4rem; letter-spacing:-0.01em; }
+  .rb { font-size:0.78rem; color:var(--muted); line-height:1.6; }
+  .dd { display:grid; grid-template-columns:1fr 1fr; gap:0.55rem; margin-top:0.65rem; }
+  .dob,.dnb { border-radius:5px; padding:0.6rem; font-family:var(--mono); font-size:0.65rem; line-height:1.6; }
+  .dob { background:rgba(16,185,129,.05); border:1px solid rgba(16,185,129,.2); color:rgba(16,185,129,.85); }
+  .dnb { background:rgba(244,63,94,.05); border:1px solid rgba(244,63,94,.2); color:rgba(244,63,94,.75); }
+  .dl { font-size:0.56rem; font-weight:700; letter-spacing:0.12em; margin-bottom:0.3rem; display:block; }
+  .dl.g { color:var(--green); } .dl.r { color:var(--rose); }
+
+  /* decomp */
+  .dtree { display:flex; flex-direction:column; gap:0.85rem; }
+  .eb { background:var(--surface); border:1px solid var(--border); border-radius:11px; overflow:hidden; }
+  .eh { display:flex; align-items:center; gap:0.7rem; padding:0.9rem 1rem; border-bottom:1px solid var(--border); cursor:pointer; user-select:none; transition:background 0.15s; }
+  .eh:hover { background:rgba(255,255,255,.02); }
+  .etag { font-family:var(--mono); font-size:0.6rem; font-weight:700; letter-spacing:0.09em; text-transform:uppercase; padding:0.12rem 0.42rem; border-radius:4px; border:1px solid currentColor; flex-shrink:0; }
+  .etit { font-size:0.85rem; font-weight:700; flex:1; }
+  .emeta { font-family:var(--mono); font-size:0.62rem; color:var(--muted); flex-shrink:0; }
+  .etog { font-size:0.62rem; color:var(--muted); transition:transform 0.2s; flex-shrink:0; }
+  .etog.open { transform:rotate(90deg); }
+  .sa { padding:0.85rem 1rem; display:none; flex-direction:column; gap:0.65rem; }
+  .sa.open { display:flex; }
+  .sb { border:1px solid var(--border-light); border-radius:7px; overflow:hidden; }
+  .sh { display:flex; align-items:center; gap:0.5rem; padding:0.55rem 0.85rem; background:rgba(255,255,255,.015); border-bottom:1px solid var(--border); font-size:0.78rem; font-weight:600; }
+  .sd { width:6px; height:6px; border-radius:50%; background:var(--cyan); flex-shrink:0; }
+  .tl { padding:0.45rem 0.85rem; display:flex; flex-direction:column; gap:0.22rem; }
+  .ti { display:flex; align-items:flex-start; gap:0.5rem; padding:0.28rem 0; font-size:0.76rem; color:var(--muted); border-bottom:1px solid rgba(255,255,255,.025); }
+  .ti:last-child { border-bottom:none; }
+  .tc { width:12px; height:12px; border:1px solid var(--border-light); border-radius:3px; margin-top:3px; flex-shrink:0; }
+  .tt { font-family:var(--mono); font-size:0.56rem; padding:0.07rem 0.3rem; border-radius:3px; margin-top:2px; flex-shrink:0; border:1px solid currentColor; }
+  .tf{color:var(--blue);} .tx{color:var(--purple);} .td2{color:var(--amber);} .tq{color:var(--green);}
+
+  .hbox { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:1.2rem 1.4rem; }
+  .htit { font-family:var(--mono); font-size:0.62rem; color:var(--muted); margin-bottom:0.9rem; letter-spacing:0.08em; text-transform:uppercase; }
+
+  /* docs */
+  .dsec { margin-bottom:2.2rem; }
+  .dtbl { background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden; font-family:var(--mono); font-size:0.75rem; }
+  .dr { display:flex; align-items:baseline; gap:0.75rem; padding:0.6rem 1.1rem; border-bottom:1px solid var(--border); }
+  .dr:last-child { border-bottom:none; }
+  .dr.must { background:rgba(16,185,129,.03); }
+  .dr.sub { padding-left:2.4rem; }
+  .dr.sub.must { background:rgba(16,185,129,.02); }
+  .dno { color:var(--blue); flex-shrink:0; }
+  .dnm { color:var(--text); flex:1; line-height:1.5; }
+  .dnm.dim { color:var(--muted); }
+  .bm { flex-shrink:0; font-size:0.58rem; font-weight:700; color:var(--green); border:1px solid var(--green); padding:0.07rem 0.35rem; border-radius:3px; }
+  .bo { flex-shrink:0; font-size:0.58rem; color:var(--muted); border:1px solid var(--border-light); padding:0.07rem 0.35rem; border-radius:3px; }
+  .dnote { font-size:0.65rem; color:var(--muted); padding:0.22rem 1.1rem 0.55rem 2.4rem; border-bottom:1px solid var(--border); font-family:var(--mono); }
+  .leg { display:flex; gap:1.1rem; margin-bottom:1rem; flex-wrap:wrap; }
+  .li { display:flex; align-items:center; gap:0.38rem; font-family:var(--mono); font-size:0.62rem; }
+
+  /* glossary */
+  .gsw { margin-bottom:1.2rem; position:relative; }
+  .gs { width:100%; padding:0.6rem 1rem 0.6rem 2.3rem; background:var(--surface); border:1px solid var(--border); border-radius:8px; color:var(--text); font-family:var(--mono); font-size:0.76rem; outline:none; transition:border-color 0.2s; }
+  .gs:focus { border-color:var(--blue); }
+  .gsi { position:absolute; left:0.8rem; top:50%; transform:translateY(-50%); color:var(--muted); font-size:0.8rem; pointer-events:none; }
+  .gg { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:0.85rem; }
+  .gc { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:0.9rem 1rem; }
+  .gc.hidden { display:none; }
+  .gn { font-family:var(--mono); font-size:0.73rem; font-weight:700; color:var(--cyan); letter-spacing:0.04em; margin-bottom:0.32rem; }
+  .gd { font-size:0.78rem; color:var(--muted); line-height:1.6; }
+
+  /* team tab */
+  .team-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:1rem; margin-top:0.5rem; }
+  .member-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:1.2rem 1.3rem; position:relative; overflow:hidden; transition:border-color 0.2s; }
+  .member-card:hover { border-color:var(--border-light); }
+  .member-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:var(--mc, var(--blue)); }
+  .member-role { font-family:var(--mono); font-size:0.62rem; color:var(--muted); letter-spacing:0.08em; text-transform:uppercase; margin-bottom:0.5rem; }
+  .member-name { font-size:0.95rem; font-weight:700; letter-spacing:-0.01em; margin-bottom:0.55rem; }
+  .member-name.tbd { color:var(--muted); font-style:italic; font-weight:400; }
+  .member-tags { display:flex; flex-wrap:wrap; gap:0.35rem; }
+  .mtag { font-family:var(--mono); font-size:0.62rem; padding:0.15rem 0.45rem; border-radius:4px; background:rgba(255,255,255,0.04); border:1px solid var(--border-light); color:var(--muted); }
+  .tbd-badge { display:inline-flex; align-items:center; gap:0.3rem; font-family:var(--mono); font-size:0.62rem; color:var(--amber); border:1px solid rgba(245,158,11,0.35); background:rgba(245,158,11,0.06); padding:0.18rem 0.5rem; border-radius:4px; margin-bottom:0.55rem; }
+
+  footer { max-width:1100px; margin:2.5rem auto 0; padding:1.3rem 2rem; border-top:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; font-family:var(--mono); font-size:0.65rem; color:var(--muted); flex-wrap:wrap; gap:0.5rem; }
+
+  @media(max-width:660px){
+    .pr{grid-template-columns:120px 1fr;}
+    .dd{grid-template-columns:1fr;}
+    .farr{display:none;}
+  }
+</style>
 </head>
 <body>
 
-    <script>
-    var config = {
-        type: Phaser.AUTO,
-        width: 800,
-        height: 600,
-        physics: {
-            default: 'arcade',
-            arcade: {
-                gravity: { y: 200 }
-            }
-        },
-        scene: {
-            preload: preload,
-            create: create
-        }
-    };
+<header>
+  <div class="hdr">
+    <div class="logo">
+      <div class="logo-box">DEV</div>
+      <span class="logo-txt">Стандарт процесса разработки команды ЭТП «ЦДТ»</span>
+    </div>
+    <span class="ver">v1.0 · 2026</span>
+  </div>
+</header>
 
-    var game = new Phaser.Game(config);
+<div class="hero">
+  <span class="hero-tag">// engineering process playbook</span>
+  <h1>Стандарт<br><span>процесса разработки</span></h1>
+  <p class="hero-sub">Единый стандарт команды — от постановки задачи до промышленной эксплуатации. Правила процесса соблюдаются так же строго, как соглашение по стилю кода.</p>
 
-    function preload ()
-    {
-        this.load.setBaseURL('https://labs.phaser.io');
+  <div style="margin-top:1.5rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:0.75rem;">
 
-        this.load.image('sky', 'assets/skies/space3.png');
-        this.load.image('logo', 'assets/sprites/phaser3-logo.png');
-        this.load.image('red', 'assets/particles/red.png');
-    }
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1rem 1.1rem;">
+      <div style="font-family:var(--mono);font-size:0.62rem;color:var(--cyan);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:0.5rem;">Об этом стандарте</div>
+      <div style="font-size:0.8rem;color:var(--muted);line-height:1.65;">Стандарт проверен в продуктовой и проектной разработке и объединяет опыт разных команд. Цель — понятный, обоснованный путь, охватывающий все критичные циклы жизни разработки. <strong style="color:var(--text)">Может и должен быть адаптирован</strong> под конкретную команду с учётом её ресурсов и компетенций: отдельные этапы допустимо упрощать или объединять.</div>
+    </div>
 
-    function create ()
-    {
-        this.add.image(400, 300, 'sky');
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1rem 1.1rem;">
+      <div style="font-family:var(--mono);font-size:0.62rem;color:var(--amber);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:0.5rem;">Стек инструментов команды</div>
+      <div style="font-size:0.8rem;color:var(--muted);line-height:1.8;">
+        <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.25rem;"><span style="font-family:var(--mono);font-size:0.65rem;color:var(--text);background:rgba(255,255,255,0.05);border:1px solid var(--border-light);padding:0.1rem 0.4rem;border-radius:3px;flex-shrink:0;">GitLab</span> Репозиторий, CI/CD, запросы на слияние, код-ревью</div>
+        <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.25rem;"><span style="font-family:var(--mono);font-size:0.65rem;color:var(--text);background:rgba(255,255,255,0.05);border:1px solid var(--border-light);padding:0.1rem 0.4rem;border-radius:3px;flex-shrink:0;">GitLab Wiki</span> Документация: ЧТЗ, ОТР, ПМИ, руководства</div>
+        <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.25rem;"><span style="font-family:var(--mono);font-size:0.65rem;color:var(--text);background:rgba(255,255,255,0.05);border:1px solid var(--border-light);padding:0.1rem 0.4rem;border-radius:3px;flex-shrink:0;">Yougile</span> Канбан-доски: бэклог, спринты, задачи</div>
+        <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.25rem;"><span style="font-family:var(--mono);font-size:0.65rem;color:var(--text);background:rgba(255,255,255,0.05);border:1px solid var(--border-light);padding:0.1rem 0.4rem;border-radius:3px;flex-shrink:0;">Telegram</span> Оперативная коммуникация, оповещения</div>
+        <div style="display:flex;align-items:center;gap:0.5rem;"><span style="font-family:var(--mono);font-size:0.65rem;color:var(--text);background:rgba(255,255,255,0.05);border:1px solid var(--border-light);padding:0.1rem 0.4rem;border-radius:3px;flex-shrink:0;">Яндекс Телемост</span> Дейли, планирование, демо, ретроспектива</div>
+      </div>
+    </div>
 
-        var particles = this.add.particles('red');
+  </div>
+</div>
 
-        var emitter = particles.createEmitter({
-            speed: 100,
-            scale: { start: 1, end: 0 },
-            blendMode: 'ADD'
-        });
+<nav class="tabs">
+  <button class="tb active" onclick="sw('flow',this)">Процесс</button>
+  <button class="tb" onclick="sw('rules',this)">Правила</button>
+  <button class="tb" onclick="sw('decomp',this)">Декомпозиция</button>
+  <button class="tb" onclick="sw('docs',this)">Документы</button>
+  <button class="tb" onclick="sw('glossary',this)">Глоссарий</button>
+  <button class="tb" onclick="sw('team',this)">Команда</button>
+</nav>
 
-        var logo = this.physics.add.image(400, 100, 'logo');
+<div class="wrap">
 
-        logo.setVelocity(100, 200);
-        logo.setBounce(1, 1);
-        logo.setCollideWorldBounds(true);
+<!-- ═══ ПРОЦЕСС ═══ -->
+<div id="tab-flow" class="panel active">
 
-        emitter.startFollow(logo);
-    }
-    </script>
+  <div class="fstrip">
+    <div class="fn c1"><span class="fn-n">01</span><span class="fn-l">Постановка<br>задачи</span></div><span class="farr">›</span>
+    <div class="fn c2"><span class="fn-n">02</span><span class="fn-l">Анализ</span></div><span class="farr">›</span>
+    <div class="fn c3"><span class="fn-n">03</span><span class="fn-l">ЧТЗ</span></div><span class="farr">›</span>
+    <div class="fn c4"><span class="fn-n">04</span><span class="fn-l">ОТР +<br>ПМИ</span></div><span class="farr">›</span>
+    <div class="fn c5"><span class="fn-n">05</span><span class="fn-l">Декомпо-<br>зиция</span></div><span class="farr">›</span>
+    <div class="fn c5"><span class="fn-n">06</span><span class="fn-l">Спринты</span></div><span class="farr">›</span>
+    <div class="fn c6"><span class="fn-n">07</span><span class="fn-l">Разра-<br>ботка</span></div><span class="farr">›</span>
+    <div class="fn c3"><span class="fn-n">08</span><span class="fn-l">Тестиро-<br>вание</span></div><span class="farr">›</span>
+    <div class="fn c7"><span class="fn-n">09</span><span class="fn-l">TEST →<br>CERT</span></div><span class="farr">›</span>
+    <div class="fn c4"><span class="fn-n">10</span><span class="fn-l">ОПЭ</span></div><span class="farr">›</span>
+    <div class="fn c6"><span class="fn-n">11</span><span class="fn-l">Пром.<br>эксплуат.</span></div>
+  </div>
 
+  <div class="phases">
+
+    <div class="pr">
+      <div class="pl c1"><span class="pn">01</span><span class="pt">Постановка<br>задачи</span></div>
+      <div class="pb">
+        <div class="arts">
+          <span class="art c1"><span class="ad"></span>Бриф</span>
+          <span class="art c1"><span class="ad"></span>Формулировка проблемы</span>
+          <span class="art c1"><span class="ad"></span>Стейкхолдеры</span>
+          <span class="art c1"><span class="ad"></span>Бизнес-цели</span>
+        </div>
+        <div class="pd">Заказчик или менеджер формулирует проблему, бизнес-цели и ожидаемый результат. Идентифицируются все заинтересованные стороны. Фиксируется согласованный бриф. <strong>Ответственный: PM / Владелец продукта</strong>.</div>
+      </div>
+    </div>
+
+    <div class="pr">
+      <div class="pl c2"><span class="pn">02</span><span class="pt">Анализ</span></div>
+      <div class="pb">
+        <div class="arts">
+          <span class="art c2"><span class="ad"></span>AS-IS</span>
+          <span class="art c2"><span class="ad"></span>TO-BE</span>
+          <span class="art c2"><span class="ad"></span>GAP-анализ</span>
+          <span class="art c2"><span class="ad"></span>Карта рисков</span>
+        </div>
+        <div class="pd">Аналитик и архитектор изучают текущее состояние, требования, ограничения и интеграции. Проводятся интервью со стейкхолдерами, мэппинг процессов. <strong>Ответственный: Аналитик / Архитектор</strong>.</div>
+      </div>
+    </div>
+
+    <div class="pr">
+      <div class="pl c3"><span class="pn">03</span><span class="pt">ЧТЗ</span></div>
+      <div class="pb">
+        <div class="arts">
+          <span class="art c3"><span class="ad"></span>Функц. требования</span>
+          <span class="art c3"><span class="ad"></span>Роли пользователей</span>
+          <span class="art c3"><span class="ad"></span>Критерии приёмки</span>
+          <span class="art c3"><span class="ad"></span>Согласование</span>
+        </div>
+        <div class="pd">Частное техническое задание: описывает <em>что</em> делает система, понятным для заказчика языком. Версионируется, проходит ревью и подписывается всеми сторонами. <strong>Ответственный: Аналитик</strong>.</div>
+      </div>
+    </div>
+
+    <div class="pr">
+      <div class="pl c4"><span class="pn">04</span><span class="pt">ОТР и ПМИ</span></div>
+      <div class="pb">
+        <div class="arts">
+          <span class="art c4"><span class="ad"></span>HLD (опц.)</span>
+          <span class="art c4"><span class="ad"></span>Архитектура</span>
+          <span class="art c4"><span class="ad"></span>Спецификация API</span>
+          <span class="art c4"><span class="ad"></span>Модель данных</span>
+          <span class="art c4"><span class="ad"></span>Тест-план</span>
+          <span class="art c4"><span class="ad"></span>Тест-кейсы</span>
+        </div>
+        <div class="pd">Описание технического решения отвечает на вопрос <em>как</em> система реализована. Для сложных проектов рекомендуется предварять ОТР кратким <strong>HLD (High-Level Design)</strong> — 1–3 страницы схем и ключевых решений, которые согласуются с командой до написания детального ОТР. <strong>ПМИ разрабатывается параллельно</strong> — QA участвует в ревью ОТР и одновременно готовит программу испытаний. Разработка не начинается без утверждённых ПМИ. <strong>Ответственные: Архитектор / Tech Lead + QA Lead</strong>.</div>
+      </div>
+    </div>
+
+    <div class="pr">
+      <div class="pl c5"><span class="pn">05</span><span class="pt">Декомпозиция<br>на эпики</span></div>
+      <div class="pb">
+        <div class="arts">
+          <span class="art c5"><span class="ad"></span>Эпики</span>
+          <span class="art c5"><span class="ad"></span>Пользовательские истории</span>
+          <span class="art c5"><span class="ad"></span>Дорожная карта</span>
+        </div>
+        <div class="pd">На основе ЧТЗ и ОТР менеджер вместе с командой разбивает работу на эпики — крупные блоки с измеримой бизнес-ценностью. Каждый эпик соответствует разделу ЧТЗ. <strong>Ответственный: PM + команда</strong>.</div>
+      </div>
+    </div>
+
+    <div class="pr">
+      <div class="pl c5"><span class="pn">06</span><span class="pt">Планирование<br>спринтов</span></div>
+      <div class="pb">
+        <div class="arts">
+          <span class="art c5"><span class="ad"></span>Бэклог спринта</span>
+          <span class="art c5"><span class="ad"></span>Оценки задач</span>
+          <span class="art c5"><span class="ad"></span>Критерии готовности</span>
+          <span class="art c5"><span class="ad"></span>Демо заказчику</span>
+          <span class="art c5"><span class="ad"></span>Ретроспектива</span>
+        </div>
+        <div class="pd">Эпики декомпозируются на задачи, оцениваются и распределяются по спринтам (2 недели). Церемонии спринта: <strong>планирование</strong> (в начале), <strong>дейли</strong> (ежедневно), <strong>демо</strong> заказчику (в конце спринта), <strong>ретроспектива</strong> (сразу после демо — разбор что шло хорошо, что улучшить, конкретные договорённости на следующий спринт). <strong>Ответственный: Scrum-мастер + команда</strong>.</div>
+      </div>
+    </div>
+
+    <div class="pr">
+      <div class="pl c6"><span class="pn">07</span><span class="pt">Разработка</span></div>
+      <div class="pb">
+        <div class="arts">
+          <span class="art c6"><span class="ad"></span>Feature-ветка</span>
+          <span class="art c6"><span class="ad"></span>Код + unit-тесты</span>
+          <span class="art c6"><span class="ad"></span>Запрос на слияние (MR)</span>
+          <span class="art c6"><span class="ad"></span>Код-ревью</span>
+          <span class="art c6"><span class="ad"></span>CI: сборка + тесты</span>
+          <span class="art c6"><span class="ad"></span>Деплой в DEV</span>
+        </div>
+        <div class="pd">Каждая задача реализуется в отдельной feature-ветке от основной ветки разработки. По завершении открывается запрос на слияние (MR) в GitLab — с описанием изменений и ссылкой на задачу в Yougile. MR проходит <strong>код-ревью</strong> минимум одним другим разработчиком и <strong>CI-проверку</strong> (сборка + автотесты). Мерж без зелёного CI и без апрува ревьюера запрещён. После мержа — автодеплой в DEV-среду. <strong>Ответственный: разработчик + ревьюер</strong>.</div>
+      </div>
+    </div>
+
+    <div class="pr">
+      <div class="pl c3"><span class="pn">08</span><span class="pt">Тестирование</span></div>
+      <div class="pb">
+        <div class="arts">
+          <span class="art c3"><span class="ad"></span>Модульные тесты</span>
+          <span class="art c3"><span class="ad"></span>Системное тестирование</span>
+          <span class="art c3"><span class="ad"></span>Регрессия</span>
+          <span class="art c3"><span class="ad"></span>Приёмочное (НАТ/UAT)</span>
+          <span class="art c3"><span class="ad"></span>Отчёт о тестировании</span>
+        </div>
+        <div class="pd">Тестирование — явная самостоятельная фаза, не часть разработки. После фиксации функциональности QA проводит системное и регрессионное тестирование в TEST-среде по ПМИ. Критические и высокие дефекты блокируют переход в следующую среду. <strong>Ответственные: QA + разработчики</strong>.</div>
+      </div>
+    </div>
+
+    <div class="pr">
+      <div class="pl c7"><span class="pn">09</span><span class="pt">Деплой по<br>средам</span></div>
+      <div class="pb">
+        <div class="arts">
+          <span class="art c7"><span class="ad"></span>DEV</span>
+          <span class="art c7"><span class="ad"></span>TEST</span>
+          <span class="art c7"><span class="ad"></span>CERT</span>
+          <span class="art c7"><span class="ad"></span>PROD</span>
+          <span class="art c7"><span class="ad"></span>Примечания к релизу</span>
+          <span class="art c7"><span class="ad"></span>План отката</span>
+        </div>
+        <div class="pd">Движение строго последовательное — каждый переход требует контрольной точки:<br>
+          <span style="font-family:var(--mono);font-size:0.73rem;display:inline-block;margin-top:0.35rem;color:var(--text)">
+            DEV <span style="color:var(--muted)">→</span> TEST <span style="color:var(--muted)">← системное тестирование QA</span><br>
+            TEST <span style="color:var(--muted)">→</span> CERT <span style="color:var(--muted)">← 0 критических/высоких дефектов</span><br>
+            CERT <span style="color:var(--muted)">→</span> PROD &nbsp;<span style="color:var(--muted)">← акт приёмки + план отката</span>
+          </span><br>
+          <strong>Ответственные: DevOps + PM + QA</strong>.
+        </div>
+      </div>
+    </div>
+
+    <div class="pr">
+      <div class="pl c4"><span class="pn">10</span><span class="pt">ОПЭ</span></div>
+      <div class="pb">
+        <div class="arts">
+          <span class="art c4"><span class="ad"></span>План ОПЭ</span>
+          <span class="art c4"><span class="ad"></span>Мониторинг 24/7</span>
+          <span class="art c4"><span class="ad"></span>Журнал инцидентов</span>
+          <span class="art c4"><span class="ad"></span>Акт завершения ОПЭ</span>
+        </div>
+        <div class="pd">Опытно-промышленная эксплуатация — работа системы в PROD с усиленным мониторингом командой разработки. Срок: <strong>1–4 недели</strong> (фиксируется в плане работ или ЧТЗ). Все инциденты в журнале. Без подписанного акта завершения ОПЭ проект не считается сданным. <strong>Ответственные: PM + Dev + Заказчик</strong>.</div>
+      </div>
+    </div>
+
+    <div class="pr">
+      <div class="pl c6"><span class="pn">11</span><span class="pt">Промышленная<br>эксплуатация</span></div>
+      <div class="pb">
+        <div class="arts">
+          <span class="art c6"><span class="ad"></span>Акт приёмки</span>
+          <span class="art c6"><span class="ad"></span>SLA</span>
+          <span class="art c6"><span class="ad"></span>Эксплуатационная документация</span>
+          <span class="art c6"><span class="ad"></span>Инструкция администратора</span>
+        </div>
+        <div class="pd">Система передаётся заказчику или эксплуатационной команде. Подписан акт приёмки, зафиксировано SLA, передана полная документация. Команда разработки переходит в режим поддержки согласно утверждённому плану поддержки. <strong>Ответственные: PM + DevOps</strong>.</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- ═══ ПРАВИЛА ═══ -->
+<div id="tab-rules" class="panel">
+
+  <div class="sec">
+    <div class="sec-h"><span class="sec-n">Р-01</span><h2>Постановка задачи</h2></div>
+    <div class="rgrid">
+      <div class="rc" style="--ac:var(--purple)">
+        <div class="rid">ПРАВИЛО-001</div><div class="rt">Нет проблемы — нет задачи</div>
+        <div class="rb">Любая задача начинается с формулировки проблемы. Без чёткого ответа «какую боль мы решаем?» задача не берётся в работу.</div>
+        <div class="dd">
+          <div class="dob"><span class="dl g">✓ ПРАВИЛЬНО</span>«Время поиска документа превышает 3 мин — пользователи теряют задачи»</div>
+          <div class="dnb"><span class="dl r">✗ НЕПРАВИЛЬНО</span>«Нужно переделать поиск — заказчик так хочет»</div>
+        </div>
+      </div>
+      <div class="rc" style="--ac:var(--purple)">
+        <div class="rid">ПРАВИЛО-002</div><div class="rt">Все стейкхолдеры определены до старта</div>
+        <div class="rb">Все заинтересованные стороны идентифицированы и приглашены к согласованию ещё на этапе брифа. Узнавать о новых участниках в процессе работы — недопустимо.</div>
+      </div>
+      <div class="rc" style="--ac:var(--purple)">
+        <div class="rid">ПРАВИЛО-003</div><div class="rt">Бриф подписывается до перехода к анализу</div>
+        <div class="rb">Фаза анализа не начинается без согласованного брифа. Даже если задача кажется очевидной — договорённости фиксируются письменно.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><span class="sec-n">Р-02</span><h2>Документация</h2></div>
+    <div class="rgrid">
+      <div class="rc" style="--ac:var(--cyan)">
+        <div class="rid">ПРАВИЛО-010</div><div class="rt">ЧТЗ — истина для бизнеса, ОТР — истина для разработки</div>
+        <div class="rb">Разграничение строгое. ЧТЗ описывает ЧТО делает система. ОТР описывает КАК она это делает. Смешивать нельзя.</div>
+        <div class="dd">
+          <div class="dob"><span class="dl g">✓ В ЧТЗ</span>«Пользователь может экспортировать отчёт в PDF»</div>
+          <div class="dnb"><span class="dl r">✗ В ЧТЗ</span>«Для экспорта используем библиотеку pdfmake v4»</div>
+        </div>
+      </div>
+      <div class="rc" style="--ac:var(--cyan)">
+        <div class="rid">ПРАВИЛО-011</div><div class="rt">Версионирование обязательно</div>
+        <div class="rb">Все документы (ЧТЗ, ОТР, ПМИ) версионируются. Каждое изменение после согласования — новая версия с описанием правок. Хранение в Git или Confluence.</div>
+      </div>
+      <div class="rc" style="--ac:var(--cyan)">
+        <div class="rid">ПРАВИЛО-012</div><div class="rt">ПМИ пишется параллельно с ОТР</div>
+        <div class="rb">QA участвует в ревью ОТР и одновременно готовит тест-план. Нельзя начинать разработку без утверждённых критериев приёмки.</div>
+      </div>
+      <div class="rc" style="--ac:var(--cyan)">
+        <div class="rid">ПРАВИЛО-013</div><div class="rt">Критерии приёмки должны быть зафиксированы до начала разработки</div>
+        <div class="rb">Критерии приёмки для каждого требования обязательны — но могут находиться <em>либо</em> в ЧТЗ (рядом с требованием), <em>либо</em> в ПМИ (в матрице тест-кейсов). Главное — они должны быть согласованы до старта разработки. Без зафиксированных критериев нельзя однозначно определить, выполнено ли требование.</div>
+        <div class="dd">
+          <div class="dob"><span class="dl g">✓ ДОПУСТИМО</span>Критерии в ЧТЗ § 6.2 <em>или</em> в ПМИ как тест-кейсы — при условии, что оба документа готовы до спринта</div>
+          <div class="dnb"><span class="dl r">✗ НЕПРАВИЛЬНО</span>«Критерии определим по ходу» — или их нет ни в ЧТЗ, ни в ПМИ</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><span class="sec-n">Р-03</span><h2>Декомпозиция и планирование</h2></div>
+    <div class="rgrid">
+      <div class="rc" style="--ac:var(--green)">
+        <div class="rid">ПРАВИЛО-020</div><div class="rt">Эпик = ценность для бизнеса</div>
+        <div class="rb">Каждый эпик имеет явную бизнес-ценность и соответствует разделу ЧТЗ. Эпик без измеримого результата — не эпик.</div>
+      </div>
+      <div class="rc" style="--ac:var(--green)">
+        <div class="rid">ПРАВИЛО-021</div><div class="rt">Задача — от 2 часов до 3 дней</div>
+        <div class="rb">Задача не меньше 2 ч и не больше 3 дней. Золотое правило: одна задача — один запрос на слияние кода.</div>
+        <div class="dd">
+          <div class="dob"><span class="dl g">✓ ПРАВИЛЬНО</span>«Реализовать эндпоинт POST /api/documents» (4 ч)</div>
+          <div class="dnb"><span class="dl r">✗ НЕПРАВИЛЬНО</span>«Реализовать модуль документов» (2 нед.)</div>
+        </div>
+      </div>
+      <div class="rc" style="--ac:var(--green)">
+        <div class="rid">ПРАВИЛО-022</div><div class="rt">Состав спринта неприкосновенен</div>
+        <div class="rb">После планирования состав спринта не меняется без решения команды. Новые задачи — в следующий спринт. Исключение: критический сбой в продуктиве.</div>
+      </div>
+      <div class="rc" style="--ac:var(--green)">
+        <div class="rid">ПРАВИЛО-023</div><div class="rt">Нет задачи без связи с эпиком</div>
+        <div class="rb">Каждая задача привязана к эпику. «Висячих» задач не бывает. Технический долг — отдельный эпик, а не скрытые задачи.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><span class="sec-n">Р-04</span><h2>Разработка и код-ревью</h2></div>
+    <div class="rgrid">
+      <div class="rc" style="--ac:var(--rose)">
+        <div class="rid">ПРАВИЛО-025</div><div class="rt">Каждая задача — отдельная feature-ветка</div>
+        <div class="rb">Разработка ведётся в изолированных ветках, создаваемых от основной ветки разработки. Имя ветки содержит номер задачи из Yougile. Работа напрямую в основной ветке запрещена.</div>
+        <div class="dd">
+          <div class="dob"><span class="dl g">✓ ПРАВИЛЬНО</span><span style="font-family:var(--mono);font-size:0.72rem">feature/YGL-123-auth-login</span></div>
+          <div class="dnb"><span class="dl r">✗ НЕПРАВИЛЬНО</span>Коммит напрямую в <span style="font-family:var(--mono);font-size:0.72rem">main</span> или <span style="font-family:var(--mono);font-size:0.72rem">develop</span></div>
+        </div>
+      </div>
+      <div class="rc" style="--ac:var(--rose)">
+        <div class="rid">ПРАВИЛО-026</div><div class="rt">MR обязателен — мерж без ревью запрещён</div>
+        <div class="rb">Любое изменение в основную ветку проходит через запрос на слияние (MR) в GitLab. MR содержит: описание изменений, ссылку на задачу в Yougile, скриншоты или видео при изменении UI. Мерж без апрува ревьюера и зелёного CI невозможен технически (защита ветки в GitLab).</div>
+      </div>
+      <div class="rc" style="--ac:var(--rose)">
+        <div class="rid">ПРАВИЛО-027</div><div class="rt">Код-ревью — не дольше 1 рабочего дня</div>
+        <div class="rb">Открытый MR должен быть рассмотрен в течение 1 рабочего дня. Ревьюер проверяет: соответствие задаче, читаемость, потенциальные ошибки, покрытие тестами. Замечания формулируются конкретно и без личной оценки автора.</div>
+        <div class="dd">
+          <div class="dob"><span class="dl g">✓ ПРАВИЛЬНО</span>«Эта функция не обрабатывает пустой список — добавь проверку»</div>
+          <div class="dnb"><span class="dl r">✗ НЕПРАВИЛЬНО</span>«Плохой код» / MR висит без ревью 3 дня</div>
+        </div>
+      </div>
+      <div class="rc" style="--ac:var(--rose)">
+        <div class="rid">ПРАВИЛО-028</div><div class="rt">CI должен быть зелёным перед мержем</div>
+        <div class="rb">CI-пайплайн (сборка + автотесты) обязан завершиться успешно до мержа MR. Мерж с падающим CI запрещён даже при наличии апрува. Если CI упал по инфраструктурной причине — решение принимается техлидом явно.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><span class="sec-n">Р-05</span><h2>Процессные правила</h2></div>
+    <div class="rgrid">
+      <div class="rc" style="--ac:var(--amber)">
+        <div class="rid">ПРАВИЛО-030</div><div class="rt">Прослеживаемость: задача → история → эпик → ЧТЗ</div>
+        <div class="rb">По любой задаче в трекере можно дойти до требования в ЧТЗ. Обратное тоже верно: у каждого требования есть задача.</div>
+      </div>
+      <div class="rc" style="--ac:var(--amber)">
+        <div class="rid">ПРАВИЛО-031</div><div class="rt">Изменение требований — только через запрос на изменение</div>
+        <div class="rb">Изменение требований после согласования ЧТЗ оформляется как запрос на изменение: оценка влияния, согласование сторонами, обновление документов.</div>
+      </div>
+      <div class="rc" style="--ac:var(--amber)">
+        <div class="rid">ПРАВИЛО-032</div><div class="rt">Демо — обязательный артефакт каждого спринта</div>
+        <div class="rb">Каждый спринт заканчивается демонстрацией заказчику. Нет демо — нет закрытия спринта. Обратная связь фиксируется и идёт в бэклог.</div>
+      </div>
+      <div class="rc" style="--ac:var(--amber)">
+        <div class="rid">ПРАВИЛО-033</div><div class="rt">Ретроспектива — обязательная церемония, а не формальность</div>
+        <div class="rb">Ретроспектива проводится после каждого демо. Формат: что шло хорошо, что мешало, конкретные договорённости на следующий спринт. Каждый пункт «улучшить» должен иметь ответственного и срок. Выводы фиксируются письменно (GitLab Wiki / Yougile).</div>
+        <div class="dd">
+          <div class="dob"><span class="dl g">✓ ПРАВИЛЬНО</span>«Договорились: код-ревью не дольше 1 дня — проверит PM, следующий спринт»</div>
+          <div class="dnb"><span class="dl r">✗ НЕПРАВИЛЬНО</span>«Поговорили, всё норм» — без записи и ответственных</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><span class="sec-n">Р-06</span><h2>Тестирование</h2></div>
+    <div class="rgrid">
+      <div class="rc" style="--ac:var(--cyan)">
+        <div class="rid">ПРАВИЛО-040</div><div class="rt">Тестирование — отдельная явная фаза</div>
+        <div class="rb">QA — не часть «разработки» в бэклоге. Системное тестирование проводится в TEST-среде после фиксации функциональности по тест-кейсам ПМИ.</div>
+        <div class="dd">
+          <div class="dob"><span class="dl g">✓ ПРАВИЛЬНО</span>Фиксация → QA в TEST → Отчёт → переход в CERT</div>
+          <div class="dnb"><span class="dl r">✗ НЕПРАВИЛЬНО</span>«QA смотрит по ходу, сразу деплоим в PROD»</div>
+        </div>
+      </div>
+      <div class="rc" style="--ac:var(--cyan)">
+        <div class="rid">ПРАВИЛО-041</div><div class="rt">Все уровни тестирования обязательны</div>
+        <div class="rb">Модульные тесты — ответственность разработчика (в спринте). Системное и регрессионное — QA (TEST). Приёмочное — с участием заказчика (CERT). Пропустить уровень — только с письменным обоснованием PM.</div>
+      </div>
+      <div class="rc" style="--ac:var(--cyan)">
+        <div class="rid">ПРАВИЛО-042</div><div class="rt">Критические и высокие дефекты блокируют переход</div>
+        <div class="rb">Ни один критический или высокий дефект не переносится в следующий релиз. Переход TEST→CERT и CERT→PROD — только при 0 открытых критических/высоких дефектах.</div>
+      </div>
+      <div class="rc" style="--ac:var(--cyan)">
+        <div class="rid">ПРАВИЛО-043</div><div class="rt">Отчёт о тестировании обязателен перед релизом</div>
+        <div class="rb">Перед деплоем в CERT или PROD QA выпускает отчёт: покрытие, пройдено / провалено / заблокировано, статус дефектов. Без отчёта деплой не согласовывается.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><span class="sec-n">Р-07</span><h2>Среды и деплой</h2></div>
+    <div class="rgrid">
+      <div class="rc" style="--ac:var(--pink)">
+        <div class="rid">ПРАВИЛО-050</div><div class="rt">Строгая последовательность: DEV → TEST → CERT → PROD</div>
+        <div class="rb">Деплой через среду запрещён. Каждый переход — явная контрольная точка: результаты тестирования, подпись ответственного, примечания к релизу.</div>
+        <div class="dd">
+          <div class="dob"><span class="dl g">✓ ПРАВИЛЬНО</span>DEV → TEST (gate QA) → CERT (gate UAT) → PROD (акт)</div>
+          <div class="dnb"><span class="dl r">✗ НЕПРАВИЛЬНО</span>«Хотфикс напрямую в PROD, протестируем потом»</div>
+        </div>
+      </div>
+      <div class="rc" style="--ac:var(--pink)">
+        <div class="rid">ПРАВИЛО-051</div><div class="rt">План отката обязателен перед каждым PROD-деплоем</div>
+        <div class="rb">До деплоя в PROD описан и проверен план отката: процедура, ответственный, максимальное время выполнения. Тестируется в CERT.</div>
+      </div>
+      <div class="rc" style="--ac:var(--pink)">
+        <div class="rid">ПРАВИЛО-052</div><div class="rt">CERT-среда максимально близка к PROD</div>
+        <div class="rb">Конфигурация, анонимизированные данные и инфраструктура CERT зеркалируют PROD. Тестирование на «облегчённой» среде не считается полноценным приёмочным испытанием.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><span class="sec-n">Р-08</span><h2>Опытно-промышленная эксплуатация</h2></div>
+    <div class="rgrid">
+      <div class="rc" style="--ac:var(--amber)">
+        <div class="rid">ПРАВИЛО-060</div><div class="rt">Параметры ОПЭ фиксируются в проектной документации</div>
+        <div class="rb">Период ОПЭ, его длительность, критерии успешного завершения и состав команды поддержки оговариваются до начала разработки и фиксируются в плане работ или ЧТЗ.</div>
+      </div>
+      <div class="rc" style="--ac:var(--amber)">
+        <div class="rid">ПРАВИЛО-061</div><div class="rt">Во время ОПЭ — усиленная поддержка</div>
+        <div class="rb">Мониторинг 24/7 с алертами. Время реакции на критический инцидент ≤ 4 ч, на высокий ≤ 1 рабочего дня. Все инциденты фиксируются в журнале и разбираются.</div>
+      </div>
+      <div class="rc" style="--ac:var(--amber)">
+        <div class="rid">ПРАВИЛО-062</div><div class="rt">Акт завершения ОПЭ — условие сдачи проекта</div>
+        <div class="rb">Без подписанного акта завершения ОПЭ проект не считается сданным. Акт содержит: количество инцидентов, их статус, заключение заказчика о соответствии ЧТЗ.</div>
+        <div class="dd">
+          <div class="dob"><span class="dl g">✓ ЗАВЕРШЕНИЕ</span>Акт ОПЭ → передача в эксплуатацию → утверждённый план поддержки / SLA</div>
+          <div class="dnb"><span class="dl r">✗ НЕПРАВИЛЬНО</span>«Деплоим и расходимся, остальное доделаем потом»</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><span class="sec-n">Р-09</span><h2>Примечания к релизу</h2></div>
+    <div class="rgrid">
+      <div class="rc" style="--ac:var(--green)">
+        <div class="rid">ПРАВИЛО-070</div><div class="rt">Release Notes готовятся перед каждым деплоем в PROD</div>
+        <div class="rb">Примечания к релизу — обязательный артефакт любого деплоя в PROD. Составляются на основе задач, отмеченных тегом релиза в Yougile. Публикуются в GitLab Wiki до деплоя.</div>
+        <div class="dd">
+          <div class="dob"><span class="dl g">✓ ПРАВИЛЬНО</span>Задачи в Yougile отмечены тегом релиза → собираем список → публикуем в wiki до деплоя</div>
+          <div class="dnb"><span class="dl r">✗ НЕПРАВИЛЬНО</span>«Что изменилось — смотрите коммиты в GitLab»</div>
+        </div>
+      </div>
+      <div class="rc" style="--ac:var(--green)">
+        <div class="rid">ПРАВИЛО-071</div><div class="rt">Тегирование задач к релизу обязательно</div>
+        <div class="rb">Каждая задача, попадающая в релиз, помечается тегом версии в Yougile (например, <span style="font-family:var(--mono);font-size:0.75rem">v1.3.0</span>) до начала финального тестирования. Задачи без тега в релиз не включаются.</div>
+      </div>
+      <div class="rc" style="--ac:var(--green)">
+        <div class="rid">ПРАВИЛО-072</div><div class="rt">Два уровня детализации: для команды и для заказчика</div>
+        <div class="rb">Для внутренней команды и тестировщиков — полный список изменений с ссылками на задачи. Для заказчика — краткая выжимка на понятном языке, только для крупных или значимых релизов. Оба варианта хранятся в GitLab Wiki.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h"><span class="sec-n">Р-10</span><h2>Разбор инцидентов (пост-мортем)</h2></div>
+    <div class="rgrid">
+      <div class="rc" style="--ac:var(--rose)">
+        <div class="rid">ПРАВИЛО-080</div><div class="rt">Пост-мортем проводится после каждого значимого инцидента</div>
+        <div class="rb">Поводы для пост-мортема: критический инцидент в PROD или ОПЭ, значимый сбой в процессе разработки (потеря данных в TEST, сорванный спринт по техническим причинам). Срок проведения — не позднее 3 рабочих дней после инцидента, пока детали свежи.</div>
+      </div>
+      <div class="rc" style="--ac:var(--rose)">
+        <div class="rid">ПРАВИЛО-081</div><div class="rt">Пост-мортем — это анализ, а не поиск виноватых</div>
+        <div class="rb">Главный принцип: культура без обвинений (blameless). Цель — понять, что пошло не так в процессе или системе, а не кто виноват. Участники говорят открыто. Выводы фиксируются и доступны всей команде в GitLab Wiki.</div>
+        <div class="dd">
+          <div class="dob"><span class="dl g">✓ ПРАВИЛЬНО</span>«Алертинг не сработал, потому что порог был выставлен слишком высоко — исправляем порог»</div>
+          <div class="dnb"><span class="dl r">✗ НЕПРАВИЛЬНО</span>«Разработчик не проверил — впредь будьте внимательнее»</div>
+        </div>
+      </div>
+      <div class="rc" style="--ac:var(--rose)">
+        <div class="rid">ПРАВИЛО-082</div><div class="rt">Каждый пост-мортем завершается конкретными действиями</div>
+        <div class="rb">Без списка корректирующих действий пост-мортем не считается завершённым. Каждое действие — задача в Yougile с ответственным и сроком. Статус задач проверяется на следующей ретроспективе.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+
+<!-- ═══ ДЕКОМПОЗИЦИЯ ═══ -->
+<div id="tab-decomp" class="panel">
+
+  <div class="hbox" style="margin-bottom:1.6rem;">
+    <div class="htit">Иерархия декомпозиции</div>
+    <div style="font-family:var(--mono);font-size:0.78rem;line-height:2.2;color:var(--text);">
+      <div style="color:var(--purple);">■ Эпик &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ← бизнес-ценность, 4–8 нед., соответствует разделу ЧТЗ</div>
+      <div style="padding-left:1.7rem;color:var(--cyan);">■ История &nbsp;&nbsp;&nbsp; ← пользовательская история, 2–5 дней, есть критерии приёмки</div>
+      <div style="padding-left:3.4rem;color:var(--green);">■ Задача &nbsp;&nbsp;&nbsp;&nbsp; ← техническая задача, 2 ч – 3 дня, один запрос на слияние</div>
+      <div style="padding-left:5.1rem;color:var(--muted);">■ Подзадача &nbsp; ← при необходимости, менее 4 ч</div>
+    </div>
+  </div>
+
+  <p style="font-size:0.81rem;color:var(--muted);margin-bottom:1.1rem;">Нажмите на эпик, чтобы раскрыть спринты и задачи.</p>
+
+  <div class="dtree">
+
+    <div class="eb">
+      <div class="eh" onclick="te(this)">
+        <span class="etag c1">ЭПИК-01</span>
+        <span class="etit">Аутентификация и управление доступом</span>
+        <span class="emeta">ЧТЗ § 4 · 4 нед.</span>
+        <span class="etog">▶</span>
+      </div>
+      <div class="sa">
+        <div class="sb">
+          <div class="sh"><span class="sd"></span>Спринт 1 — Базовая авторизация (2 нед.)</div>
+          <div class="tl">
+            <div class="ti"><div class="tc"></div><span class="tt tx">ТЕХ</span>Настройка OAuth 2.0 / Keycloak, конфигурация окружений</div>
+            <div class="ti"><div class="tc"></div><span class="tt tf">ФУНКЦ</span>Форма входа: поля, валидация, обработка ошибок</div>
+            <div class="ti"><div class="tc"></div><span class="tt tf">ФУНКЦ</span>JWT: выпуск, обновление и отзыв токенов</div>
+            <div class="ti"><div class="tc"></div><span class="tt td2">ДИЗАЙН</span>Экраны входа и восстановления пароля</div>
+            <div class="ti"><div class="tc"></div><span class="tt tq">QA</span>Тест-кейсы: авторизация, невалидные данные, блокировка</div>
+          </div>
+        </div>
+        <div class="sb">
+          <div class="sh"><span class="sd"></span>Спринт 2 — Роли и разграничение доступа</div>
+          <div class="tl">
+            <div class="ti"><div class="tc"></div><span class="tt td2">ДИЗАЙН</span>Интерфейс управления ролями (панель администратора)</div>
+            <div class="ti"><div class="tc"></div><span class="tt tf">ФУНКЦ</span>RBAC: промежуточный слой проверки прав доступа</div>
+            <div class="ti"><div class="tc"></div><span class="tt tf">ФУНКЦ</span>Журнал аудита действий пользователей</div>
+            <div class="ti"><div class="tc"></div><span class="tt tq">QA</span>Проверка безопасности: попытки несанкционированного доступа</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="eb">
+      <div class="eh" onclick="te(this)">
+        <span class="etag c2">ЭПИК-02</span>
+        <span class="etit">Управление документами</span>
+        <span class="emeta">ЧТЗ § 5 · 6 нед.</span>
+        <span class="etog">▶</span>
+      </div>
+      <div class="sa">
+        <div class="sb">
+          <div class="sh"><span class="sd"></span>Спринт 3 — Загрузка и хранение</div>
+          <div class="tl">
+            <div class="ti"><div class="tc"></div><span class="tt tx">ТЕХ</span>Интеграция с S3-совместимым хранилищем</div>
+            <div class="ti"><div class="tc"></div><span class="tt tf">ФУНКЦ</span>API загрузки: multipart, валидация типов и размеров</div>
+            <div class="ti"><div class="tc"></div><span class="tt tf">ФУНКЦ</span>Версионирование документов</div>
+            <div class="ti"><div class="tc"></div><span class="tt td2">ДИЗАЙН</span>Компонент загрузки с перетаскиванием</div>
+          </div>
+        </div>
+        <div class="sb">
+          <div class="sh"><span class="sd"></span>Спринт 4 — Поиск и фильтрация</div>
+          <div class="tl">
+            <div class="ti"><div class="tc"></div><span class="tt tx">ТЕХ</span>Elasticsearch: настройка индексации документов</div>
+            <div class="ti"><div class="tc"></div><span class="tt tf">ФУНКЦ</span>Полнотекстовый поиск с подсветкой совпадений</div>
+            <div class="ti"><div class="tc"></div><span class="tt tf">ФУНКЦ</span>Фильтры: тип, дата, автор, тег</div>
+            <div class="ti"><div class="tc"></div><span class="tt tq">QA</span>Нагрузочное тестирование поиска</div>
+          </div>
+        </div>
+        <div class="sb">
+          <div class="sh"><span class="sd"></span>Спринт 5 — Совместная работа</div>
+          <div class="tl">
+            <div class="ti"><div class="tc"></div><span class="tt tf">ФУНКЦ</span>Комментарии к документу с упоминаниями</div>
+            <div class="ti"><div class="tc"></div><span class="tt tf">ФУНКЦ</span>Управление правами на уровне документа</div>
+            <div class="ti"><div class="tc"></div><span class="tt td2">ДИЗАЙН</span>Панель истории версий</div>
+            <div class="ti"><div class="tc"></div><span class="tt tq">QA</span>Приёмочные испытания по ПМИ — раздел 5</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="eb">
+      <div class="eh" onclick="te(this)">
+        <span class="etag c5">ЭПИК-03</span>
+        <span class="etit">Отчётность и аналитика</span>
+        <span class="emeta">ЧТЗ § 7 · 4 нед.</span>
+        <span class="etog">▶</span>
+      </div>
+      <div class="sa">
+        <div class="sb">
+          <div class="sh"><span class="sd"></span>Спринт 6 — Базовые отчёты</div>
+          <div class="tl">
+            <div class="ti"><div class="tc"></div><span class="tt tf">ФУНКЦ</span>Генератор отчётов: шаблоны PDF и XLSX</div>
+            <div class="ti"><div class="tc"></div><span class="tt td2">ДИЗАЙН</span>Дашборд с ключевыми метриками</div>
+            <div class="ti"><div class="tc"></div><span class="tt tf">ФУНКЦ</span>Планировщик автоматической рассылки отчётов</div>
+          </div>
+        </div>
+        <div class="sb">
+          <div class="sh"><span class="sd"></span>Спринт 7 — Расширенная аналитика</div>
+          <div class="tl">
+            <div class="ti"><div class="tc"></div><span class="tt tf">ФУНКЦ</span>Конструктор пользовательских фильтров для отчётов</div>
+            <div class="ti"><div class="tc"></div><span class="tt tx">ТЕХ</span>Агрегация данных для исторической статистики</div>
+            <div class="ti"><div class="tc"></div><span class="tt tq">QA</span>Приёмочные испытания по ПМИ — раздел 7</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="eb">
+      <div class="eh" onclick="te(this)">
+        <span class="etag c7">ЭПИК-ТД</span>
+        <span class="etit">Технический долг и производительность</span>
+        <span class="emeta">Внутренний · 2 нед.</span>
+        <span class="etog">▶</span>
+      </div>
+      <div class="sa">
+        <div class="sb">
+          <div class="sh"><span class="sd"></span>Спринт 8 — Оптимизация</div>
+          <div class="tl">
+            <div class="ti"><div class="tc"></div><span class="tt tx">ТЕХ</span>Оптимизация медленных запросов к БД (&gt; 500 мс)</div>
+            <div class="ti"><div class="tc"></div><span class="tt tx">ТЕХ</span>Обновление зависимостей с известными уязвимостями</div>
+            <div class="ti"><div class="tc"></div><span class="tt tx">ТЕХ</span>Покрытие модульными тестами до 80% по критическим модулям</div>
+            <div class="ti"><div class="tc"></div><span class="tt tq">QA</span>Нагрузочное тестирование системы в целом</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div style="margin-top:1.4rem;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1.1rem 1.4rem;">
+    <div style="font-family:var(--mono);font-size:0.62rem;color:var(--muted);margin-bottom:0.75rem;letter-spacing:0.08em;text-transform:uppercase;">Типы задач</div>
+    <div style="display:flex;flex-wrap:wrap;gap:0.65rem;">
+      <span style="display:flex;align-items:center;gap:0.38rem;font-size:0.75rem;"><span class="tt tf" style="margin:0">ФУНКЦ</span> — функциональная задача, реализует требование ЧТЗ</span>
+      <span style="display:flex;align-items:center;gap:0.38rem;font-size:0.75rem;"><span class="tt tx" style="margin:0">ТЕХ</span> — техническая задача, инфраструктура, архитектура</span>
+      <span style="display:flex;align-items:center;gap:0.38rem;font-size:0.75rem;"><span class="tt td2" style="margin:0">ДИЗАЙН</span> — проектирование интерфейса</span>
+      <span style="display:flex;align-items:center;gap:0.38rem;font-size:0.75rem;"><span class="tt tq" style="margin:0">QA</span> — тестирование и контроль качества</span>
+    </div>
+  </div>
+
+</div>
+
+
+<!-- ═══ ДОКУМЕНТЫ ═══ -->
+<div id="tab-docs" class="panel">
+
+  <div class="leg">
+    <div class="li"><span style="width:10px;height:10px;border-radius:2px;background:rgba(16,185,129,.15);border:1px solid var(--green);display:inline-block;"></span><span style="color:var(--green);">ОБЯЗАТЕЛЬНЫЙ раздел</span></div>
+    <div class="li"><span style="width:10px;height:10px;border-radius:2px;background:rgba(107,122,153,.08);border:1px solid var(--border-light);display:inline-block;"></span><span style="color:var(--muted);">ОПЦИОНАЛЬНЫЙ раздел</span></div>
+  </div>
+
+  <div class="dsec">
+    <div class="sec-h"><h2>ЧТЗ — Частное техническое задание</h2></div>
+    <p style="font-size:0.81rem;color:var(--muted);margin-bottom:0.9rem;line-height:1.6;">Описывает <strong>что</strong> делает система — с точки зрения бизнеса и пользователя. Язык доступен заказчику. Не содержит технических решений реализации.</p>
+    <div class="dtbl">
+      <div class="dr must"><span class="dno">01</span><span class="dnm">Введение: назначение документа, область применения, история версий</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr must"><span class="dno">02</span><span class="dnm">Термины, определения и сокращения</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr must"><span class="dno">03</span><span class="dnm">Цели и задачи системы, бизнес-контекст</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr"><span class="dno">04</span><span class="dnm dim">Описание текущего состояния AS-IS (если существует действующая система)</span><span class="bo">ОПЦ.</span></div>
+      <div class="dr must"><span class="dno">05</span><span class="dnm">Роли и типы пользователей системы</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr must"><span class="dno">06</span><span class="dnm" style="font-weight:700">Функциональные требования</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr sub must"><span class="dno">6.1</span><span class="dnm">Перечень функций: что делает система, для кого, входные и выходные данные</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr sub"><span class="dno">6.2</span><span class="dnm dim">Критерии приёмки каждой функции (формат: «Дано / Когда / Тогда» или чеклист)</span><span class="bo">ОПЦ.*</span></div>
+      <div class="dnote">* Обязательны в одном из двух мест: здесь в ЧТЗ — или в ПМИ в виде тест-кейсов. Допустимо выносить в ПМИ, если тот готовится параллельно и согласован до начала разработки. Критерии должны существовать до старта спринта — в каком документе они живут, решает команда.</div>
+      <div class="dr sub"><span class="dno">6.3</span><span class="dnm dim">Пользовательские сценарии (Use Cases) — при наличии многошаговых процессов</span><span class="bo">ОПЦ.</span></div>
+      <div class="dr sub"><span class="dno">6.4</span><span class="dnm dim">Макеты экранов / прототипы (Wireframes)</span><span class="bo">ОПЦ.</span></div>
+      <div class="dr must"><span class="dno">07</span><span class="dnm">Нефункциональные требования (верхний уровень): производительность, безопасность, доступность</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr"><span class="dno">08</span><span class="dnm dim">Требования к интеграциям с внешними системами</span><span class="bo">ОПЦ.*</span></div>
+      <div class="dnote">* Обязательно, если интеграции входят в scope проекта</div>
+      <div class="dr must"><span class="dno">09</span><span class="dnm">Ограничения и допущения</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr"><span class="dno">10</span><span class="dnm dim">Требования к периоду ОПЭ: длительность, критерии успешного завершения</span><span class="bo">ОПЦ.*</span></div>
+      <div class="dnote">* Обязательно при формальной приёмке (госзаказ, корпоративные стандарты)</div>
+      <div class="dr must"><span class="dno">11</span><span class="dnm">Лист согласования: версия, дата, подписи всех сторон</span><span class="bm">ОБЯЗАТ.</span></div>
+    </div>
+  </div>
+
+  <div class="dsec">
+    <div class="sec-h"><h2>ОТР — Описание технического решения</h2></div>
+    <p style="font-size:0.81rem;color:var(--muted);margin-bottom:0.9rem;line-height:1.6;">Описывает <strong>как</strong> система это делает — архитектура, технологический стек, API, модель данных. Язык технический. Ссылается на ЧТЗ, не дублирует его.</p>
+    <div class="dtbl">
+      <div class="dr"><span class="dno">00</span><span class="dnm dim">HLD (High-Level Design) — архитектурный обзор верхнего уровня: ключевые компоненты, их взаимодействие, стек, без детализации реализации</span><span class="bo">ОПЦ.*</span></div>
+      <div class="dnote">* Рекомендуется для сложных проектов как промежуточный артефакт между ЧТЗ и полным ОТР. Позволяет быстро выровнять архитектурное понимание в команде до написания детального документа. Может быть частью ОТР (вводным разделом) или отдельным документом.</div>
+      <div class="dr must"><span class="dno">01</span><span class="dnm">Обзор системы: контекст, место в ИТ-ландшафте, границы</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr must"><span class="dno">02</span><span class="dnm">Архитектурные решения (ADR): обоснование выбора стека и подходов с альтернативами</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr must"><span class="dno">03</span><span class="dnm">Компонентная архитектура: диаграммы уровней, взаимодействие компонентов</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr must"><span class="dno">04</span><span class="dnm">Модель данных (ER-диаграмма, схема БД с описанием сущностей)</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr must"><span class="dno">05</span><span class="dnm">Спецификация API (OpenAPI / Swagger или аналог)</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr"><span class="dno">06</span><span class="dnm dim">Интеграции: протоколы, форматы данных, обработка ошибок и таймаутов</span><span class="bo">ОПЦ.*</span></div>
+      <div class="dnote">* Обязательно при наличии интеграций в scope</div>
+      <div class="dr must"><span class="dno">07</span><span class="dnm" style="font-weight:700">Нефункциональные требования (детально)</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr sub must"><span class="dno">7.1</span><span class="dnm">Производительность: ожидаемая нагрузка (запросов в секунду), допустимое время отклика для ключевых операций</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr sub must"><span class="dno">7.2</span><span class="dnm">Безопасность: модель угроз, соответствие OWASP, шифрование данных</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr sub must"><span class="dno">7.3</span><span class="dnm">Масштабируемость и отказоустойчивость: стратегия, целевой SLA</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr must"><span class="dno">08</span><span class="dnm">Инфраструктура, окружения и процесс доставки (CI/CD, среды)</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr"><span class="dno">09</span><span class="dnm dim">Стратегия миграции данных (при наличии существующей системы)</span><span class="bo">ОПЦ.</span></div>
+      <div class="dr must"><span class="dno">10</span><span class="dnm">Лист согласования</span><span class="bm">ОБЯЗАТ.</span></div>
+    </div>
+  </div>
+
+  <div class="dsec">
+    <div class="sec-h"><h2>ПМИ — Программа и методика испытаний</h2></div>
+    <p style="font-size:0.81rem;color:var(--muted);margin-bottom:0.9rem;line-height:1.6;">Определяет: <strong>что</strong> проверяем, <strong>как</strong> проверяем, <strong>кто</strong> и <strong>каков</strong> критерий успеха. Разрабатывается параллельно с ОТР — не после.</p>
+    <div class="dtbl">
+      <div class="dr must"><span class="dno">01</span><span class="dnm">Цели, объект и область испытаний</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr must"><span class="dno">02</span><span class="dnm">Матрица прослеживаемости: тест-кейсы ↔ требования ЧТЗ</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr must"><span class="dno">03</span><span class="dnm" style="font-weight:700">Виды испытаний</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr sub must"><span class="dno">3.1</span><span class="dnm">Функциональное тестирование (по каждому требованию ЧТЗ)</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr sub must"><span class="dno">3.2</span><span class="dnm">Регрессионное тестирование (перед каждым деплоем в CERT и PROD)</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr sub"><span class="dno">3.3</span><span class="dnm dim">Нагрузочное тестирование (при наличии требований к производительности)</span><span class="bo">ОПЦ.*</span></div>
+      <div class="dnote">* Обязательно, если в ЧТЗ / ОТР зафиксированы количественные NFR по производительности</div>
+      <div class="dr sub must"><span class="dno">3.4</span><span class="dnm">Приёмочные испытания с участием заказчика (НАТ / UAT)</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr must"><span class="dno">04</span><span class="dnm">Тест-кейсы в формате «Дано / Когда / Тогда» с ожидаемыми результатами</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr must"><span class="dno">05</span><span class="dnm">Критерии входа и выхода для каждой среды (входные и выходные условия)</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr must"><span class="dno">06</span><span class="dnm">Тестовая среда: конфигурация, тестовые данные, необходимые доступы</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr must"><span class="dno">07</span><span class="dnm">Ответственные за каждый вид испытаний, плановые сроки</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr"><span class="dno">08</span><span class="dnm dim">Классификация дефектов: уровни критичности, приоритеты, жизненный цикл</span><span class="bo">РЕК.</span></div>
+      <div class="dr must"><span class="dno">09</span><span class="dnm">Форма отчёта о тестировании и форма акта приёмки</span><span class="bm">ОБЯЗАТ.</span></div>
+    </div>
+  </div>
+
+  <div class="dsec">
+    <div class="sec-h"><h2>Примечания к релизу (Release Notes)</h2></div>
+    <p style="font-size:0.81rem;color:var(--muted);margin-bottom:0.9rem;line-height:1.6;">Составляются перед каждым деплоем в PROD на основе задач, тегированных в Yougile. Хранятся в GitLab Wiki. Существуют в двух версиях: полной (для команды) и краткой (для заказчика — только для значимых релизов).</p>
+    <div class="dtbl">
+      <div class="dr must"><span class="dno">01</span><span class="dnm">Версия релиза и дата деплоя</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr must"><span class="dno">02</span><span class="dnm" style="font-weight:700">Что изменилось — полная версия (для команды и тестировщиков)</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr sub must"><span class="dno">2.1</span><span class="dnm">Новая функциональность: список задач с кратким описанием и ссылкой на задачу в Yougile</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr sub must"><span class="dno">2.2</span><span class="dnm">Исправленные ошибки: список дефектов с указанием критичности</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr sub"><span class="dno">2.3</span><span class="dnm dim">Технические изменения: обновления инфраструктуры, зависимостей, конфигурации</span><span class="bo">ОПЦ.</span></div>
+      <div class="dr sub"><span class="dno">2.4</span><span class="dnm dim">Известные ограничения или временные решения в этом релизе</span><span class="bo">ОПЦ.</span></div>
+      <div class="dr"><span class="dno">03</span><span class="dnm dim" style="font-weight:600">Краткая версия (для заказчика) — только для крупных или значимых релизов</span><span class="bo">ОПЦ.</span></div>
+      <div class="dr sub"><span class="dno">3.1</span><span class="dnm dim">Ключевые изменения на понятном пользователю языке (без технических деталей)</span><span class="bo">ОПЦ.</span></div>
+      <div class="dr sub"><span class="dno">3.2</span><span class="dnm dim">Что это даёт пользователю / какую проблему решает</span><span class="bo">ОПЦ.</span></div>
+      <div class="dr must"><span class="dno">04</span><span class="dnm">Инструкция по откату (ссылка на план отката или краткое описание)</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr must"><span class="dno">05</span><span class="dnm">Ответственный за деплой и дата публикации примечаний</span><span class="bm">ОБЯЗАТ.</span></div>
+    </div>
+  </div>
+
+  <div class="dsec">
+    <div class="sec-h"><h2>Пост-мортем (разбор инцидента)</h2></div>
+    <p style="font-size:0.81rem;color:var(--muted);margin-bottom:0.9rem;line-height:1.6;">Составляется после каждого значимого инцидента в PROD/ОПЭ или крупного сбоя в процессе разработки. Публикуется в GitLab Wiki и доступен всей команде. Срок подготовки — не позднее 3 рабочих дней после инцидента.</p>
+    <div class="dtbl">
+      <div class="dr must"><span class="dno">01</span><span class="dnm">Заголовок, дата и время инцидента, затронутые компоненты / функции</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr must"><span class="dno">02</span><span class="dnm">Краткое резюме: что произошло и каков был эффект для пользователей или процесса</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr must"><span class="dno">03</span><span class="dnm">Хронология событий: последовательность с временными метками — что произошло, когда обнаружили, как реагировали</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr must"><span class="dno">04</span><span class="dnm">Первопричина (Root Cause): что именно стало причиной инцидента</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr must"><span class="dno">05</span><span class="dnm">Что сработало хорошо: действия команды или процессы, которые помогли</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr must"><span class="dno">06</span><span class="dnm">Что можно улучшить: слабые места в процессе, мониторинге, документации</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr must"><span class="dno">07</span><span class="dnm" style="font-weight:700">Корректирующие действия: конкретные задачи с ответственным и сроком (заводятся в Yougile)</span><span class="bm">ОБЯЗАТ.</span></div>
+      <div class="dr"><span class="dno">08</span><span class="dnm dim">Метрики инцидента: время обнаружения, время до реакции, время восстановления</span><span class="bo">РЕК.</span></div>
+    </div>
+  </div>
+
+</div>
+<div id="tab-glossary" class="panel">
+
+  <div class="gsw">
+    <span class="gsi">🔍</span>
+    <input class="gs" type="text" placeholder="Поиск термина..." oninput="fg(this.value)">
+  </div>
+
+  <div class="gg" id="gg">
+
+    <div class="gc" data-t="чтз частное техническое задание требования бизнес отличие тз">
+      <div class="gn">ЧТЗ</div>
+      <div class="gd">Частное техническое задание. Описывает функциональные требования конкретной системы или модуля с точки зрения бизнеса и пользователя. Язык доступен заказчику. Отвечает на вопрос «что?». Не содержит технических решений.<br><br>
+      <strong style="color:var(--text)">Отличие от ТЗ:</strong> ЧТЗ — это детализация ТЗ для конкретной подсистемы или функционального блока. ТЗ задаёт общие рамки проекта, ЧТЗ — конкретные требования к отдельной части. В небольших проектах ЧТЗ может заменять ТЗ целиком.</div>
+    </div>
+
+    <div class="gc" data-t="тз техническое задание требования проект рамки отличие чтз">
+      <div class="gn">ТЗ</div>
+      <div class="gd">Техническое задание. Документ верхнего уровня, определяющий общие цели, рамки и требования к проекту в целом. Является основой для разработки ЧТЗ на отдельные подсистемы.<br><br>
+      <strong style="color:var(--text)">Отличие от ЧТЗ:</strong> ТЗ охватывает проект целиком и может оставаться на высоком уровне абстракции. ЧТЗ — детальный документ по конкретному функциональному блоку, на основе которого ведётся разработка. В практике команды основным рабочим документом является ЧТЗ.</div>
+    </div>
+
+    <div class="gc" data-t="отр общее техническое решение архитектура стек api">
+      <div class="gn">ОТР</div>
+      <div class="gd">Описание технического решения. Описывает архитектуру, стек, API, модель данных и технические решения. Язык технический. Отвечает на вопрос «как?». Ссылается на ЧТЗ.</div>
+    </div>
+
+    <div class="gc" data-t="пми программа методика испытаний тестирование тест-кейсы">
+      <div class="gn">ПМИ</div>
+      <div class="gd">Программа и методика испытаний. Определяет что, как, кем и когда проверяется. Содержит тест-кейсы, критерии приёмки и форму акта. Разрабатывается параллельно с ОТР.</div>
+    </div>
+
+    <div class="gc" data-t="опэ опытно промышленная эксплуатация prod мониторинг">
+      <div class="gn">ОПЭ</div>
+      <div class="gd">Опытно-промышленная эксплуатация. Ограниченный период работы системы в PROD с усиленным мониторингом команды (1–4 нед.). Завершается актом — без него проект не считается сданным.</div>
+    </div>
+
+    <div class="gc" data-t="эпик epic бизнес ценность функциональность блок">
+      <div class="gn">Эпик</div>
+      <div class="gd">Крупный блок функциональности с измеримой бизнес-ценностью. Соответствует разделу ЧТЗ. Декомпозируется на истории. Длительность разработки: 4–8 недель.</div>
+    </div>
+
+    <div class="gc" data-t="пользовательская история user story роль действие цель">
+      <div class="gn">Пользовательская история</div>
+      <div class="gd">Описание функции: «Как [роль], я хочу [действие], чтобы [цель]». Обязательно имеет критерии приёмки. Декомпозируется на задачи. Входит в состав эпика.</div>
+    </div>
+
+    <div class="gc" data-t="спринт sprint итерация 2 недели планирование демо ретро">
+      <div class="gn">Спринт</div>
+      <div class="gd">Итерация разработки, 2 недели. Включает: планирование → ежедневные встречи → демо заказчику → ретроспектива. Результат — рабочий инкремент, принятый QA.</div>
+    </div>
+
+    <div class="gc" data-t="критерии готовности dod definition of done">
+      <div class="gn">Критерии готовности</div>
+      <div class="gd">Согласованный список условий, при выполнении которых задача считается завершённой. Например: код написан, ревью пройдено, тесты зелёные, принято QA.</div>
+    </div>
+
+    <div class="gc" data-t="критерии приёмки acceptance criteria ac дано когда тогда">
+      <div class="gn">Критерии приёмки</div>
+      <div class="gd">Условия, при которых требование или история считается реализованной. Формат: «Дано / Когда / Тогда». Без критериев приёмки задача не берётся в спринт.</div>
+    </div>
+
+    <div class="gc" data-t="запрос изменение change request cr влияние согласование">
+      <div class="gn">Запрос на изменение</div>
+      <div class="gd">Формализованная процедура изменения согласованных требований. Включает: оценку влияния на сроки и бюджет, согласование сторонами, обновление документов.</div>
+    </div>
+
+    <div class="gc" data-t="прослеживаемость traceability matrix задача требование покрытие">
+      <div class="gn">Прослеживаемость</div>
+      <div class="gd">Наличие связи: задача → история → эпик → требование ЧТЗ. По любой задаче можно дойти до требования и обратно. Обеспечивает полноту покрытия разработки.</div>
+    </div>
+
+    <div class="gc" data-t="архитектурное решение adr architecture decision record обоснование">
+      <div class="gn">ADR (Architecture Decision Record)</div>
+      <div class="gd">Запись об архитектурном решении. Короткий структурированный документ: контекст (почему встал вопрос), рассмотренные варианты, принятое решение, последствия. Хранится в ОТР или wiki. Никогда не удаляется — при смене решения старый ADR помечается устаревшим, новый добавляется рядом. Позволяет команде понимать, почему система устроена именно так.</div>
+    </div>
+
+    <div class="gc" data-t="нат натурные испытания приёмка заказчик акт">
+      <div class="gn">НАТ</div>
+      <div class="gd">Натурные (приёмочные) испытания с участием представителей заказчика. Проводятся в CERT-среде по ПМИ. Результат — подписанный акт приёмки. Синоним UAT.</div>
+    </div>
+
+    <div class="gc" data-t="dev test cert prod среды окружение деплой">
+      <div class="gn">Среды: DEV / TEST / CERT / PROD</div>
+      <div class="gd">DEV — разработка. TEST — системное тестирование QA. CERT — приёмочное тестирование, зеркало PROD. PROD — промышленная среда. Переход строго последовательный через контрольные точки.</div>
+    </div>
+
+    <div class="gc" data-t="фиксация функциональности feature freeze заморозка тестирование">
+      <div class="gn">Фиксация функциональности</div>
+      <div class="gd">Момент остановки разработки новых возможностей перед системным тестированием. После этого момента допускается только исправление дефектов, найденных QA.</div>
+    </div>
+
+    <div class="gc" data-t="uat приёмочное тестирование пользователь заказчик cert">
+      <div class="gn">UAT (User Acceptance Testing) — приёмочное тестирование</div>
+      <div class="gd">Тестирование с участием заказчика или конечных пользователей в CERT-среде по тест-кейсам ПМИ. Цель — подтвердить соответствие системы ЧТЗ в реальных условиях.</div>
+    </div>
+
+    <div class="gc" data-t="план отката rollback процедура prod откат">
+      <div class="gn">План отката</div>
+      <div class="gd">Задокументированная и протестированная процедура возврата к предыдущей версии при неудачном деплое. Включает: шаги, ответственного, максимальное время. Тестируется в CERT.</div>
+    </div>
+
+    <div class="gc" data-t="контрольная точка gate переход среды релиз деплой согласование">
+      <div class="gn">Контрольная точка (Gate)</div>
+      <div class="gd">Явная процедура согласования перехода между средами: результаты тестирования, статус дефектов, подпись ответственного. Без прохождения gate деплой в следующую среду запрещён.</div>
+    </div>
+
+    <div class="gc" data-t="технический долг tech debt рефакторинг эпик бэклог">
+      <div class="gn">Технический долг</div>
+      <div class="gd">Накопленные решения, снижающие качество кода или архитектуры. Оформляется как отдельный эпик в бэклоге — явно, с оценкой и приоритизацией. Никогда не скрывается в других задачах.</div>
+    </div>
+
+    <div class="gc" data-t="бриф brief постановка задача стейкхолдеры цели согласование">
+      <div class="gn">Бриф</div>
+      <div class="gd">Краткий согласованный документ, фиксирующий проблему, бизнес-цели, ожидаемый результат и стейкхолдеров. Входной артефакт для фазы анализа. Подписывается до старта работ.</div>
+    </div>
+
+    <div class="gc" data-t="hld high level design высокоуровневый дизайн архитектура">
+      <div class="gn">HLD (High-Level Design)</div>
+      <div class="gd">Высокоуровневое описание архитектуры: ключевые компоненты, их взаимодействие, выбор стека — без детализации реализации. Создаётся между ЧТЗ и полным ОТР. Может быть вводным разделом ОТР или отдельным документом. Особенно полезен для сложных проектов, где нужно быстро согласовать архитектурный подход.</div>
+    </div>
+
+    <div class="gc" data-t="критерии приёмки acceptance criteria чтз пми где размещать">
+      <div class="gn">Критерии приёмки — где размещать?</div>
+      <div class="gd">Могут быть зафиксированы <strong>либо в ЧТЗ</strong> (рядом с каждым требованием) — типично для Agile, <strong>либо в ПМИ</strong> (в виде тест-кейсов) — типично для проектного подхода. Оба варианта допустимы. Главное правило: критерии должны существовать и быть согласованы до начала разработки требования.</div>
+    </div>
+
+
+    <div class="gc" data-t="ретроспектива ретро спринт улучшения команда договорённости">
+      <div class="gn">Ретроспектива</div>
+      <div class="gd">Командная встреча в конце каждого спринта. Три вопроса: что шло хорошо, что мешало, что конкретно изменим. Каждый пункт «изменить» получает ответственного и срок. Результаты фиксируются письменно. Цель — непрерывное улучшение процесса, а не разбор полётов ради формальности.</div>
+    </div>
+
+    <div class="gc" data-t="release notes примечания релиз changelog версия изменения">
+      <div class="gn">Release Notes (примечания к релизу)</div>
+      <div class="gd">Документ, описывающий что изменилось в конкретной версии системы. Составляется на основе задач с тегом релиза в Yougile. Существует в двух версиях: полной — для команды и тестировщиков (со ссылками на задачи), краткой — для заказчика (на понятном языке, только для крупных релизов). Хранится в GitLab Wiki.</div>
+    </div>
+
+    <div class="gc" data-t="пост-мортем postmortem post-mortem инцидент разбор первопричина rca blameless">
+      <div class="gn">Пост-мортем</div>
+      <div class="gd">Структурированный разбор значимого инцидента или сбоя. Цель — понять первопричину и предотвратить повторение, а не найти виноватых (принцип blameless). Проводится не позднее 3 дней после инцидента. Результат — список конкретных задач в Yougile. Публикуется в GitLab Wiki и доступен всей команде.</div>
+    </div>
+
+    <div class="gc" data-t="blameless культура без обвинений инциденты психологическая безопасность">
+      <div class="gn">Blameless (культура без обвинений)</div>
+      <div class="gd">Принцип разбора инцидентов: причины ищутся в процессах и системах, а не в ошибках конкретного человека. Люди допускают ошибки — задача команды выстроить процесс так, чтобы одна ошибка не приводила к сбою. Без этого принципа пост-мортемы превращаются в формальность.</div>
+    </div>
+
+    <div class="gc" data-t="rca root cause analysis первопричина анализ инцидент">
+      <div class="gn">RCA (анализ первопричины)</div>
+      <div class="gd">Root Cause Analysis — метод поиска глубинной причины инцидента. Вопрос «почему?» задаётся несколько раз подряд (метод «5 почему»), пока не найдена системная причина, а не симптом. Используется в пост-мортемах.</div>
+    </div>
+
+    <div class="gc" data-t="mr merge request запрос слияние gitlab ревью код">
+      <div class="gn">MR (Merge Request)</div>
+      <div class="gd">Запрос на слияние кода в GitLab. Основной инструмент код-ревью и контроля качества. Содержит описание изменений и ссылку на задачу в Yougile. Мерж возможен только при наличии апрува ревьюера и зелёного CI. Аналог Pull Request в других системах.</div>
+    </div>
+
+    <div class="gc" data-t="feature ветка branch gitlab задача изоляция">
+      <div class="gn">Feature-ветка</div>
+      <div class="gd">Изолированная ветка в GitLab для разработки одной задачи. Создаётся от основной ветки разработки, имя содержит номер задачи. После завершения работы сливается в основную ветку через MR. Прямые коммиты в основную ветку запрещены.</div>
+    </div>
+
+    <div class="gc" data-t="ci cd pipeline пайплайн сборка автотесты gitlab непрерывная интеграция">
+      <div class="gn">CI (непрерывная интеграция)</div>
+      <div class="gd">Continuous Integration — автоматический запуск сборки и тестов при каждом MR и коммите в GitLab. Гарантирует, что новый код не ломает существующую функциональность. Зелёный CI — обязательное условие для мержа.</div>
+    </div>
+
+    <div class="gc" data-t="sla соглашение об уровне услуг поддержка инциденты время реакции доступность">
+      <div class="gn">SLA</div>
+      <div class="gd">Соглашение об уровне обслуживания. Фиксирует: доступность системы (например, 99,9%), время реакции на инциденты по критичности, ответственных. Утверждается при передаче системы в эксплуатацию.</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══ КОМАНДА ═══ -->
+<div id="tab-team" class="panel">
+
+  <p style="font-size:0.83rem;color:var(--muted);line-height:1.7;margin-bottom:1.8rem;max-width:680px;">Состав команды ЭТП «ЦДТ». Роли соответствуют фазам процесса разработки — ответственный за каждую фазу указан в описании соответствующего этапа.</p>
+
+  <div class="team-grid">
+
+    <div class="member-card" style="--mc:var(--blue)">
+      <div class="member-role">Руководитель продукта</div>
+      <div class="member-name">Павел Афанасьев</div>
+      <div class="member-tags">
+        <span class="mtag">Постановка задачи</span>
+        <span class="mtag">Приоритизация бэклога</span>
+        <span class="mtag">Согласование ЧТЗ</span>
+        <span class="mtag">Демо / приёмка</span>
+        <span class="mtag">Коммуникация с заказчиком</span>
+      </div>
+    </div>
+
+    <div class="member-card" style="--mc:var(--purple)">
+      <div class="member-role">Тимлид (Технический)</div>
+      <div class="member-name">Борис Ананьев</div>
+      <div class="member-tags">
+        <span class="mtag">Архитектура / ОТР</span>
+        <span class="mtag">HLD / ADR</span>
+        <span class="mtag">Код-ревью</span>
+        <span class="mtag">CI/CD</span>
+        <span class="mtag">Технические решения</span>
+        <span class="mtag">Наставничество</span>
+      </div>
+    </div>
+
+    <div class="member-card" style="--mc:var(--cyan)">
+      <div class="member-role">Фича-лид</div>
+      <div class="member-name" style="color:var(--text)">Ротация — любой из команды</div>
+      <div style="font-size:0.75rem;color:var(--muted);margin:0.4rem 0 0.55rem;line-height:1.5;">Назначается на конкретный эпик или фичу. Отвечает за декомпозицию, координацию задач внутри фичи и приёмку результата.</div>
+      <div class="member-tags">
+        <span class="mtag">Декомпозиция эпика</span>
+        <span class="mtag">Координация задач</span>
+        <span class="mtag">Приёмка фичи</span>
+      </div>
+    </div>
+
+    <div class="member-card" style="--mc:var(--green)">
+      <div class="member-role">Бэкенд-разработчик</div>
+      <div class="member-name">Наталья Родионова</div>
+      <div class="member-tags">
+        <span class="mtag">Серверная логика</span>
+        <span class="mtag">API</span>
+        <span class="mtag">Модель данных</span>
+        <span class="mtag">Интеграции</span>
+        <span class="mtag">Unit-тесты</span>
+      </div>
+    </div>
+
+    <div class="member-card" style="--mc:var(--pink)">
+      <div class="member-role">Фронтенд-разработчик</div>
+      <div class="member-name">Евгения Малащенкова</div>
+      <div class="member-tags">
+        <span class="mtag">UI / UX реализация</span>
+        <span class="mtag">Клиентская логика</span>
+        <span class="mtag">Компоненты</span>
+        <span class="mtag">Адаптивность</span>
+        <span class="mtag">Unit-тесты</span>
+      </div>
+    </div>
+
+    <div class="member-card" style="--mc:var(--amber)">
+      <div class="member-role">Ведущий аналитик</div>
+      <div class="member-name">Александр Костик</div>
+      <div class="member-tags">
+        <span class="mtag">Анализ требований</span>
+        <span class="mtag">ЧТЗ</span>
+        <span class="mtag">AS-IS / TO-BE</span>
+        <span class="mtag">Пользовательские сценарии</span>
+        <span class="mtag">Согласование с заказчиком</span>
+        <span class="mtag">ОТР</span>
+        <span class="mtag">HLD</span>
+        <span class="mtag">Технические решения</span>
+        <span class="mtag">Модель данных</span>
+        <span class="mtag">Описание интеграций</span>
+        <span class="mtag">ПМИ</span>
+      </div>
+    </div>
+
+    <div class="member-card" style="--mc:var(--rose)">
+      <div class="member-role">Тестирование и техподдержка</div>
+      <div class="tbd-badge">TBD</div>
+      <div class="member-name tbd">Сотрудник не назначен</div>
+      <div class="member-tags">
+        <span class="mtag">QA / тест-кейсы</span>
+        <span class="mtag">ПМИ</span>
+        <span class="mtag">Регрессия</span>
+        <span class="mtag">Приёмочное тестирование</span>
+        <span class="mtag">Техподдержка пользователей</span>
+      </div>
+    </div>
+
+    <div class="member-card" style="--mc:var(--blue)">
+      <div class="member-role">Владелец продукта</div>
+      <div class="tbd-badge">TBD</div>
+      <div class="member-name tbd">Сотрудник не назначен</div>
+      <div class="member-tags">
+        <span class="mtag">Видение продукта</span>
+        <span class="mtag">Приоритизация</span>
+        <span class="mtag">Бэклог продукта</span>
+        <span class="mtag">Представление интересов заказчика</span>
+      </div>
+    </div>
+
+    <div class="member-card" style="--mc:var(--cyan)">
+      <div class="member-role">DevOps</div>
+      <div class="tbd-badge">TBD</div>
+      <div class="member-name tbd">Сотрудник не назначен</div>
+      <div class="member-tags">
+        <span class="mtag">CI/CD пайплайны</span>
+        <span class="mtag">Управление средами</span>
+        <span class="mtag">Деплой</span>
+        <span class="mtag">Мониторинг</span>
+        <span class="mtag">Инфраструктура</span>
+      </div>
+    </div>
+
+  </div>
+    <div style="font-family:var(--mono);font-size:0.72rem;line-height:2.1;color:var(--muted);">
+      <div><span style="color:var(--text);display:inline-block;width:200px;">01–02 Постановка / Анализ</span><span style="color:var(--blue)">Афанасьев</span> + <span style="color:var(--amber)">Костик</span></div>
+      <div><span style="color:var(--text);display:inline-block;width:200px;">03 ЧТЗ</span><span style="color:var(--amber)">Костик</span> (ведёт) + команда (ревью)</div>
+      <div><span style="color:var(--text);display:inline-block;width:200px;">04 ОТР + ПМИ</span><span style="color:var(--purple)">Ананьев</span> (ОТР) + QA TBD (ПМИ)</div>
+      <div><span style="color:var(--text);display:inline-block;width:200px;">05–06 Декомпозиция / Спринты</span><span style="color:var(--blue)">Афанасьев</span> + <span style="color:var(--purple)">Ананьев</span> + команда</div>
+      <div><span style="color:var(--text);display:inline-block;width:200px;">07 Разработка</span><span style="color:var(--green)">Родионова</span> + <span style="color:var(--pink)">Малащенкова</span> (ревью: <span style="color:var(--purple)">Ананьев</span>)</div>
+      <div><span style="color:var(--text);display:inline-block;width:200px;">08 Тестирование</span>QA <span style="color:var(--amber)">TBD</span> + разработчики</div>
+      <div><span style="color:var(--text);display:inline-block;width:200px;">09 Деплой по средам</span><span style="color:var(--purple)">Ананьев</span> + <span style="color:var(--blue)">Афанасьев</span></div>
+      <div><span style="color:var(--text);display:inline-block;width:200px;">10 ОПЭ</span><span style="color:var(--blue)">Афанасьев</span> + вся команда</div>
+      <div><span style="color:var(--text);display:inline-block;width:200px;">11 Пром. эксплуатация</span><span style="color:var(--blue)">Афанасьев</span> + Техподдержка <span style="color:var(--amber)">TBD</span></div>
+    </div>
+  </div>
+
+</div>
+
+</div><!-- /wrap -->
+
+<footer>
+  <span>СТАНДАРТ ПРОЦЕССА РАЗРАБОТКИ · ЭТП «ЦДТ» · v1.0 · 2026</span>
+  <span>Изменения вносятся через запрос на изменение документа — по аналогии с запросом на слияние кода</span>
+</footer>
+
+<script>
+  function sw(id, btn) {
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tb').forEach(b => b.classList.remove('active'));
+    document.getElementById('tab-' + id).classList.add('active');
+    btn.classList.add('active');
+  }
+  function te(h) {
+    const a = h.nextElementSibling;
+    const t = h.querySelector('.etog');
+    a.classList.toggle('open');
+    t.classList.toggle('open');
+  }
+  function fg(q) {
+    const v = q.toLowerCase().trim();
+    document.querySelectorAll('#gg .gc').forEach(c => {
+      const txt = (c.dataset.t + ' ' + c.textContent).toLowerCase();
+      c.classList.toggle('hidden', v.length > 0 && !txt.includes(v));
+    });
+  }
+</script>
 </body>
 </html>
