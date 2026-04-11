@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ЦДТ · Биллинг — прототип</title>
+<style>
+  :root {
+    --bg: #f5f5f3;
+    --bg2: #ffffff;
+    --bg3: #f0efe9;
+    --bg-info: #e8f0fb;
+    --bg-warn: #fdf3e3;
+    --bg-success: #eaf5ee;
+    --bg-danger: #fdecea;
+    --text: #1a1a18;
+    --text2: #6b6b65;
+    --text3: #9b9b93;
+    --border: rgba(0,0,0,0.10);
+    --border2: rgba(0,0,0,0.18);
+    --blue: #185FA5;
+    --blue-dark: #0C447C;
+    --blue-light: #e8f0fb;
+    --green: #1D9E75;
+    --green-dark: #0F6E56;
+    --green-light: #eaf5ee;
+    --amber: #BA7517;
+    --amber-light: #fdf3e3;
+    --red: #A32D2D;
+    --red-light: #fdecea;
+    --radius: 8px;
+    --radius-lg: 12px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.05);
+    --font: 'DM Sans', system-ui, sans-serif;
+    --mono: 'DM Mono', 'Fira Mono', monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1c1a; --bg2: #262623; --bg3: #1a1a18;
+      --bg-info: #0d2340; --bg-warn: #2a1f08; --bg-success: #0d2a18; --bg-danger: #2a1010;
+      --text: #e8e8e0; --text2: #9a9a90; --text3: #6a6a62;
+      --border: rgba(255,255,255,0.09); --border2: rgba(255,255,255,0.16);
+      --blue-light: #0d2340; --green-light: #0d2a18; --amber-light: #2a1f08; --red-light: #2a1010;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font); font-size: 14px; color: var(--text); background: var(--bg); line-height: 1.5; }
+  a { color: var(--blue); }
+
+  /* layout */
+  .app { display: flex; min-height: 100vh; }
+  .sidebar { width: 220px; min-width: 220px; background: var(--bg2); border-right: 1px solid var(--border); display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+  .main { flex: 1; overflow: auto; padding: 28px 32px; max-width: 900px; }
+
+  /* sidebar */
+  .sb-head { padding: 18px 18px 14px; border-bottom: 1px solid var(--border); }
+  .brand { font-size: 15px; font-weight: 600; letter-spacing: -0.3px; }
+  .brand span { color: var(--blue); }
+  .brand-sub { font-size: 10px; color: var(--text3); margin-top: 1px; }
+  .sb-user { padding: 12px 18px; border-bottom: 1px solid var(--border); }
+  .ava { width: 32px; height: 32px; border-radius: 50%; background: var(--blue-light); color: var(--blue); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; flex-shrink: 0; }
+  .uname { font-size: 12px; font-weight: 500; }
+  .urole { font-size: 10px; color: var(--text2); }
+  .rsel { width: 100%; margin-top: 8px; padding: 6px 8px; font-size: 11px; border: 1px solid var(--border2); border-radius: var(--radius); background: var(--bg3); color: var(--text); cursor: pointer; font-family: var(--font); }
+  .nav { flex: 1; padding: 8px 0; }
+  .ni { display: flex; align-items: center; gap: 8px; padding: 8px 18px; font-size: 12px; cursor: pointer; color: var(--text2); border-left: 2px solid transparent; transition: all .12s; }
+  .ni:hover { background: var(--bg3); color: var(--text); }
+  .ni.active { background: var(--blue-light); color: var(--blue); font-weight: 500; border-left-color: var(--blue); }
+  .ni-ico { width: 16px; text-align: center; font-size: 13px; }
+  .sb-footer { padding: 12px 18px; border-top: 1px solid var(--border); font-size: 10px; color: var(--text3); }
+  .inv-cnt { font-size: 9px; background: var(--blue); color: #fff; padding: 1px 5px; border-radius: 8px; margin-left: 4px; display: none; }
+  .inv-cnt.show { display: inline; }
+
+  /* page */
+  .pg { display: none; }
+  .pg.active { display: block; }
+  .ptitle { font-size: 22px; font-weight: 600; margin-bottom: 20px; letter-spacing: -0.4px; }
+
+  /* cards */
+  .card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 18px; box-shadow: var(--shadow); }
+  .acc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px; }
+  .acc-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px; box-shadow: var(--shadow); transition: box-shadow .15s; }
+  .acc-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+  .acc-card.type-01, .acc-card.type-02 { border-top: 3px solid var(--blue); }
+  .acc-card.type-03, .acc-card.type-04 { border-top: 3px solid var(--green); }
+  .acc-lbl { font-size: 11px; color: var(--text2); margin-bottom: 2px; display: flex; align-items: center; gap: 5px; }
+  .acc-tag { font-size: 9px; background: var(--bg3); color: var(--text3); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); }
+  .acc-num { font-size: 10px; color: var(--text3); font-family: var(--mono); margin-bottom: 8px; }
+  .acc-free { font-size: 20px; font-weight: 600; letter-spacing: -0.3px; }
+  .acc-sub { font-size: 11px; color: var(--text2); margin-top: 3px; }
+  .acc-sub.amber { color: var(--amber); }
+  .acc-sub.green { color: var(--green-dark); }
+  .btn-row { display: flex; gap: 6px; margin-top: 12px; }
+
+  /* buttons */
+  .btn { padding: 7px 14px; border-radius: var(--radius); border: 1px solid var(--border2); background: var(--bg2); font-size: 12px; cursor: pointer; color: var(--text); font-family: var(--font); font-weight: 500; transition: all .12s; white-space: nowrap; }
+  .btn:hover { background: var(--bg3); }
+  .btn:active { transform: scale(0.98); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+  .btn-p { background: var(--blue); color: #fff; border-color: var(--blue); }
+  .btn-p:hover { background: var(--blue-dark); }
+  .btn-sm { padding: 5px 10px; font-size: 11px; }
+  .btn-danger { background: var(--red-light); color: var(--red); border-color: var(--red); }
+
+  .ops-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+  .op-btn { display: flex; align-items: center; gap: 6px; padding: 8px 16px; border: 1px solid var(--border2); border-radius: var(--radius); background: var(--bg2); font-size: 12px; cursor: pointer; color: var(--text); font-family: var(--font); font-weight: 500; box-shadow: var(--shadow); transition: all .12s; }
+  .op-btn:hover { background: var(--bg3); }
+  .op-btn.primary-op { background: var(--blue); color: #fff; border-color: var(--blue); }
+  .op-btn.primary-op:hover { background: var(--blue-dark); }
+
+  /* table */
+  .stitle { font-size: 13px; font-weight: 600; margin-bottom: 10px; color: var(--text); }
+  .htable { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .htable th { text-align: left; padding: 8px 10px; color: var(--text2); font-weight: 500; border-bottom: 1px solid var(--border); font-size: 11px; }
+  .htable td { padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .htable tr:last-child td { border-bottom: none; }
+  .tx-plus { color: var(--green-dark); font-weight: 600; }
+  .tx-minus { color: var(--red); font-weight: 600; }
+  .tx-res { color: var(--amber); font-weight: 600; }
+
+  /* badges */
+  .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; }
+  .bs { background: var(--green-light); color: var(--green-dark); }
+  .bp { background: var(--amber-light); color: var(--amber); }
+  .bc { background: var(--blue-light); color: var(--blue-dark); }
+  .be { background: var(--red-light); color: var(--red); }
+
+  /* modal */
+  .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 100; align-items: center; justify-content: center; backdrop-filter: blur(2px); }
+  .modal-bg.open { display: flex; }
+  .modal { background: var(--bg2); border-radius: var(--radius-lg); border: 1px solid var(--border); width: 480px; max-width: 96vw; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.2); }
+  .mh { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .mt { font-size: 14px; font-weight: 600; }
+  .mc { cursor: pointer; color: var(--text2); font-size: 20px; background: none; border: none; line-height: 1; padding: 2px 6px; border-radius: 4px; }
+  .mc:hover { background: var(--bg3); }
+  .mb { padding: 20px; }
+  .mf { padding: 12px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; align-items: center; }
+
+  /* form */
+  .fg { margin-bottom: 14px; }
+  .fl { font-size: 11px; color: var(--text2); margin-bottom: 4px; display: block; font-weight: 500; }
+  .fi { width: 100%; padding: 8px 10px; border: 1px solid var(--border2); border-radius: var(--radius); font-size: 13px; background: var(--bg2); color: var(--text); font-family: var(--font); transition: border-color .12s; }
+  .fi:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(24,95,165,0.12); }
+  .fh { font-size: 10px; color: var(--text3); margin-top: 3px; }
+  .err-msg { font-size: 11px; color: var(--red); margin-top: 4px; min-height: 16px; }
+
+  /* info boxes */
+  .ibox { background: var(--bg-info); border-radius: var(--radius); padding: 10px 14px; font-size: 11px; color: var(--blue-dark); margin-bottom: 12px; line-height: 1.6; border-left: 3px solid var(--blue); }
+  .wbox { background: var(--bg-warn); border-radius: var(--radius); padding: 10px 14px; font-size: 11px; color: var(--amber); margin-bottom: 12px; line-height: 1.6; border-left: 3px solid var(--amber); }
+  .sbox { background: var(--bg-success); border-radius: var(--radius-lg); padding: 24px; text-align: center; }
+  .si { font-size: 32px; margin-bottom: 8px; }
+  .st { font-size: 15px; font-weight: 600; color: var(--green-dark); margin-bottom: 5px; }
+  .ss { font-size: 12px; color: #3B6D11; line-height: 1.6; }
+
+  /* requisites block */
+  .reqblock { background: var(--bg3); border-radius: var(--radius); padding: 14px; font-size: 11px; border: 1px solid var(--border); }
+  .rr { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 6px; align-items: baseline; }
+  .rr:last-child { margin-bottom: 0; }
+  .rk { color: var(--text2); flex-shrink: 0; white-space: nowrap; }
+  .rv { font-family: var(--mono); text-align: right; word-break: break-all; }
+  .rv.hl { color: var(--blue); font-weight: 600; }
+
+  /* step indicator */
+  .step-row { display: flex; margin-bottom: 18px; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); }
+  .step { flex: 1; text-align: center; padding: 8px 4px; font-size: 10px; background: var(--bg3); color: var(--text3); font-weight: 500; }
+  .step + .step { border-left: 1px solid var(--border); }
+  .step.done { background: var(--green-light); color: var(--green-dark); }
+  .step.active { background: var(--blue-light); color: var(--blue); font-weight: 600; }
+
+  /* QR */
+  .qr-wrap { background: var(--bg3); border-radius: var(--radius-lg); padding: 20px; text-align: center; margin-bottom: 16px; border: 1px solid var(--border); }
+
+  /* items */
+  .inv-item, .dep-item, .req-item { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 8px; box-shadow: var(--shadow); }
+  .empty { color: var(--text3); font-size: 12px; padding: 32px 0; text-align: center; }
+
+  /* spinner */
+  .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid rgba(255,255,255,0.35); border-top-color: #fff; border-radius: 50%; animation: spin .6s linear infinite; vertical-align: middle; margin-right: 5px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* reset button */
+  .reset-btn { font-size: 10px; color: var(--text3); cursor: pointer; background: none; border: none; font-family: var(--font); padding: 4px 0; }
+  .reset-btn:hover { color: var(--red); }
+
+  @media (max-width: 700px) {
+    .sidebar { width: 180px; min-width: 180px; }
+    .main { padding: 16px; }
+    .acc-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 520px) {
+    .app { flex-direction: column; }
+    .sidebar { width: 100%; height: auto; position: static; flex-direction: row; flex-wrap: wrap; }
+    .nav { display: flex; flex-direction: row; padding: 4px 8px; }
+    .ni { padding: 6px 10px; border-left: none; border-bottom: 2px solid transparent; }
+    .ni.active { border-left: none; border-bottom-color: var(--blue); }
+  }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<div class="app">
+  <div class="sidebar">
+    <div class="sb-head">
+      <div class="brand"><span>ЦДТ</span>.РУ</div>
+      <div class="brand-sub">Биллинг · прототип v0.2</div>
+    </div>
+    <div class="sb-user">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <div class="ava">КИ</div>
+        <div><div class="uname">Константин Иванов</div><div class="urole" id="urole">Участник торгов</div></div>
+      </div>
+      <select class="rsel" id="roleSelect" onchange="switchRole(this.value)">
+        <option value="ut">Участник торгов</option>
+        <option value="ot">Организатор торгов</option>
+      </select>
+    </div>
+    <nav class="nav">
+      <div class="ni active" data-pg="wallet" onclick="showPg('wallet')"><span class="ni-ico">◈</span> Финансы</div>
+      <div class="ni" data-pg="invoices" onclick="showPg('invoices')"><span class="ni-ico">📋</span> Заявления <span class="inv-cnt" id="inv-badge">0</span></div>
+      <div class="ni" data-pg="deposits" onclick="showPg('deposits')"><span class="ni-ico">◉</span> Задатки</div>
+      <div class="ni" data-pg="requisites" onclick="showPg('requisites')"><span class="ni-ico">≡</span> Реквизиты</div>
+      <div style="height:1px;background:var(--border);margin:6px 0"></div>
+      <div class="ni" onclick="showPg('wallet')"><span class="ni-ico">◷</span> Мои торги</div>
+      <div class="ni" onclick="showPg('wallet')"><span class="ni-ico">◖</span> Профиль</div>
+    </nav>
+    <div class="sb-footer">
+      <button class="reset-btn" onclick="resetDB()">⟳ Сбросить данные</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <div id="pg-wallet" class="pg active">
+      <div class="ptitle">Финансы</div>
+      <div class="card" style="margin-bottom:16px">
+        <div style="font-size:11px;color:var(--text2);margin-bottom:4px">Итого по всем счетам</div>
+        <div style="font-size:28px;font-weight:700;color:var(--blue);letter-spacing:-0.5px" id="totalBal">—</div>
+      </div>
+      <div class="acc-grid" id="accGrid"></div>
+      <div class="ops-row" id="opsRow"></div>
+      <div class="stitle">История операций</div>
+      <table class="htable">
+        <thead><tr><th>Дата / время</th><th>Операция</th><th>Счёт</th><th>Сумма</th><th>Статус</th></tr></thead>
+        <tbody id="txBody"></tbody>
+      </table>
+    </div>
+
+    <div id="pg-invoices" class="pg">
+      <div class="ptitle">Заявления</div>
+      <div id="invList"></div>
+    </div>
+
+    <div id="pg-deposits" class="pg">
+      <div class="ptitle">Задатки</div>
+      <div class="ibox">Средства резервируются автоматически при подаче заявки на торги. Вывод недоступен до завершения торгов или принудительного снятия резерва оператором.</div>
+      <div id="depList"></div>
+    </div>
+
+    <div id="pg-requisites" class="pg">
+      <div class="ptitle">Банковские реквизиты</div>
+      <div class="wbox">Изменение верифицированных реквизитов сбрасывает статус верификации и требует повторного одобрения оператора ЭТП. Вывод д/с возможен только по верифицированным реквизитам.</div>
+      <div id="reqList"></div>
+      <button class="btn btn-p" onclick="openModal('addReq')" style="margin-top:14px">+ Добавить реквизиты</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── modals ── -->
+<div class="modal-bg" id="modal-addFunds" onclick="closeBg(event,'addFunds')"><div class="modal">
+  <div class="mh"><span class="mt" id="af-title">Пополнение счёта</span><button class="mc" onclick="closeModal('addFunds')">×</button></div>
+  <div class="mb" id="addFunds-body"></div><div class="mf" id="addFunds-footer"></div>
+</div></div>
+
+<div class="modal-bg" id="modal-withdraw" onclick="closeBg(event,'withdraw')"><div class="modal">
+  <div class="mh"><span class="mt">Вывод денежных средств</span><button class="mc" onclick="closeModal('withdraw')">×</button></div>
+  <div class="mb" id="withdraw-body"></div><div class="mf" id="withdraw-footer"></div>
+</div></div>
+
+<div class="modal-bg" id="modal-payService" onclick="closeBg(event,'payService')"><div class="modal">
+  <div class="mh"><span class="mt">Оплата услуг ЭТП</span><button class="mc" onclick="closeModal('payService')">×</button></div>
+  <div class="mb" id="payService-body"></div><div class="mf" id="payService-footer"></div>
+</div></div>
+
+<div class="modal-bg" id="modal-transfer" onclick="closeBg(event,'transfer')"><div class="modal">
+  <div class="mh"><span class="mt">Перевод между субсчетами</span><button class="mc" onclick="closeModal('transfer')">×</button></div>
+  <div class="mb" id="transfer-body"></div><div class="mf" id="transfer-footer"></div>
+</div></div>
+
+<div class="modal-bg" id="modal-addReq" onclick="closeBg(event,'addReq')"><div class="modal">
+  <div class="mh"><span class="mt">Добавить банковские реквизиты</span><button class="mc" onclick="closeModal('addReq')">×</button></div>
+  <div class="mb" id="addReq-body"></div><div class="mf" id="addReq-footer"></div>
+</div></div>
+
+<script>
+// ── helpers ──
+const fmt = n => Number(n).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' ₽';
+const fmtDt = d => { const dt=new Date(d); return dt.toLocaleDateString('ru-RU')+' '+dt.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}); };
+const genId = pfx => pfx+'-'+Math.random().toString(36).slice(2,9).toUpperCase();
+const reqIdGen = pfx => pfx+'-'+new Date().toISOString().slice(0,10).replace(/-/g,'')+'-'+String(Math.floor(Math.random()*900000+100000));
+
+// ── seed ──
+function buildSeed(){
+  return {
+    _v: 4,
+    accounts: [
+      {accountId:'ACC-UT-01',subAccountTypeId:'01',label:'Счёт оплаты услуг УТ', displayNumber:'26.04054.67890-01',balanceFree:12500,    balanceReserved:0,      balanceVirtual:0,isBlocked:false},
+      {accountId:'ACC-UT-03',subAccountTypeId:'03',label:'Задатковый счёт УТ',   displayNumber:'26.04054.67890-03',balanceFree:173556700, balanceReserved:350000, balanceVirtual:0,isBlocked:false},
+      {accountId:'ACC-OT-02',subAccountTypeId:'02',label:'Счёт оплаты услуг ОТ', displayNumber:'26.04054.67890-02',balanceFree:56700,     balanceReserved:0,      balanceVirtual:0,isBlocked:false},
+      {accountId:'ACC-OT-04',subAccountTypeId:'04',label:'Задатковый счёт ОТ',   displayNumber:'26.04054.67890-04',balanceFree:186000000, balanceReserved:0,      balanceVirtual:0,isBlocked:false},
+    ],
+    transactions: [
+      {txId:'TX-001',accountId:'ACC-UT-03',type:'пополнение',             status:'завершена',amount: 1560000,createdAt:'2026-04-08T10:11:00Z',description:'Пополнение через Точка Банк'},
+      {txId:'TX-002',accountId:'ACC-UT-03',type:'резервирование задатка', status:'завершена',amount: -350000,createdAt:'2026-04-09T15:22:00Z',description:'Задаток по торгам № 4783'},
+      {txId:'TX-003',accountId:'ACC-UT-01',type:'пополнение',             status:'завершена',amount:   12500,createdAt:'2026-04-10T21:44:00Z',description:'Пополнение счёта услуг'},
+      {txId:'TX-004',accountId:'ACC-UT-01',type:'оплата услуги',          status:'завершена',amount:   -5400,createdAt:'2026-04-07T09:00:00Z',description:'Аккредитация на ЭТП'},
+    ],
+    invoices: [
+      {invoiceId:'INV-001',accountId:'ACC-UT-03',type:'пополнение',status:'исполнено',amount:1560000,requestId:'P-20260408-104321',createdAt:'2026-04-08T10:00:00Z',description:'Пополнение задаткового счёта'},
+    ],
+    deposits: [
+      {depositId:'DEP-001',payerAccountId:'ACC-UT-03',auctionId:4783,tradeLotId:1,amount:350000, status:'зарезервирован',reservedAt:'2026-04-09T15:22:00Z',payer:'Иванов К.С.',allowedWithdrawalType:'none'},
+      {depositId:'DEP-002',payerAccountId:'ACC-UT-03',auctionId:4750,tradeLotId:2,amount:1200000,status:'переведён',     reservedAt:'2026-04-01T10:00:00Z',payer:'Иванов К.С.',allowedWithdrawalType:'debtor'},
+    ],
+    requisites: [
+      {requisiteId:'REQ-SEED-01',accountId:'ACC-UT-01',bankName:'ПАО «Сбербанк»', bik:'044525225',corAccount:'30101810400000000225',accountNumber:'40702810938000123456',inn:'781234567890',kpp:'780101001',fullName:'ООО «Тест Трейд»',   isVerified:true, isDefault:true, createdAt:'2026-03-01T00:00:00Z'},
+      {requisiteId:'REQ-SEED-02',accountId:'ACC-OT-02',bankName:'АО «Тинькофф»',  bik:'044525974',corAccount:'30101810145250000974',accountNumber:'40702810000001234567',inn:'781234567891',kpp:'780101002',fullName:'ООО «Тест Трейд»',   isVerified:false,isDefault:true, createdAt:'2026-03-15T00:00:00Z'},
+    ],
+    _role: 'ut'
+  };
+}
+
+// ── storage (localStorage) ──
+let DB = null;
+const STORE_KEY = 'cdt_billing_v4';
+
+function loadDB(){
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if(raw){ const p=JSON.parse(raw); if(p._v===4){ DB=p; return; } }
+  } catch(e){}
+  DB = buildSeed();
+  saveDB();
+}
+
+function saveDB(){
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(DB)); } catch(e){}
+}
+
+function resetDB(){
+  if(!confirm('Сбросить все данные к начальным значениям?')) return;
+  localStorage.removeItem(STORE_KEY);
+  DB = buildSeed();
+  saveDB();
+  role = 'ut';
+  document.getElementById('roleSelect').value = 'ut';
+  document.getElementById('urole').textContent = 'Участник торгов';
+  renderAll();
+}
+
+let role = 'ut';
+
+// ── selectors ──
+function accsForRole(r){ return DB.accounts.filter(a => r==='ut' ? (a.subAccountTypeId==='01'||a.subAccountTypeId==='03') : (a.subAccountTypeId==='02'||a.subAccountTypeId==='04')); }
+function txsForRole(r){ const ids=accsForRole(r).map(a=>a.accountId); return DB.transactions.filter(t=>ids.includes(t.accountId)).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)); }
+function invsForRole(r){ const ids=accsForRole(r).map(a=>a.accountId); return DB.invoices.filter(i=>ids.includes(i.accountId)).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)); }
+function reqsForRole(r){ const ids=accsForRole(r).map(a=>a.accountId); return DB.requisites.filter(q=>ids.includes(q.accountId)); }
+
+function switchRole(val){ role=val; DB._role=val; saveDB(); document.getElementById('urole').textContent=val==='ut'?'Участник торгов':'Организатор торгов'; renderAll(); }
+
+function renderAll(){ renderAccounts(); renderTx(); renderInvoices(); renderDeposits(); renderRequisites(); updateBadge(); }
+
+// ── render accounts ──
+function renderAccounts(){
+  const accs = accsForRole(role);
+  const total = accs.reduce((s,a)=>s+a.balanceFree+a.balanceReserved+a.balanceVirtual,0);
+  document.getElementById('totalBal').textContent = fmt(total);
+
+  document.getElementById('accGrid').innerHTML = accs.map(a=>{
+    const isDepOT  = a.subAccountTypeId==='04';
+    const isDepAny = a.subAccountTypeId==='03'||a.subAccountTypeId==='04';
+    return `<div class="acc-card type-${a.subAccountTypeId}">
+      <div class="acc-lbl">${a.label} <span class="acc-tag">${a.subAccountTypeId}</span></div>
+      <div class="acc-num">${a.displayNumber}</div>
+      <div class="acc-free">${fmt(a.balanceFree)}</div>
+      ${a.balanceReserved>0 ? `<div class="acc-sub amber">В резерве: ${fmt(a.balanceReserved)}</div>` : `<div class="acc-sub">Резерв: 0,00 ₽</div>`}
+      ${a.balanceVirtual>0  ? `<div class="acc-sub green">Виртуальные: ${fmt(a.balanceVirtual)}</div>` : ''}
+      <div class="btn-row">
+        ${!isDepOT
+          ? `<button class="btn btn-p btn-sm" onclick="openFundsModal('${a.accountId}')">+ Пополнить</button>`
+          : `<button class="btn btn-sm" disabled title="Задатковый счёт ОТ пополняется только при поступлении задатка от УТ">Пополнение недоступно</button>`}
+        ${!isDepAny ? `<button class="btn btn-sm" onclick="openWithdrawModal('${a.accountId}')">↑ Вывести</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('opsRow').innerHTML = `
+    <button class="op-btn primary-op" onclick="openFundsModal(null)">+ Пополнить счёт</button>
+    <button class="op-btn" onclick="openWithdrawModal(null)">↑ Вывести д/с</button>
+    <button class="op-btn" onclick="openModal('payService')">◈ Оплатить услугу</button>
+    ${role==='ot' ? `<button class="op-btn" onclick="openModal('transfer')">⇄ Перевод между счетами</button>` : ''}`;
+}
+
+// ── render transactions ──
+function renderTx(){
+  const txs = txsForRole(role);
+  document.getElementById('txBody').innerHTML = txs.length
+    ? txs.map(t=>{
+        const acc = DB.accounts.find(a=>a.accountId===t.accountId);
+        const plus=t.amount>0, res=t.type==='резервирование задатка';
+        return `<tr>
+          <td style="font-size:11px;color:var(--text2);white-space:nowrap">${fmtDt(t.createdAt)}</td>
+          <td>${t.type}</td>
+          <td style="font-size:11px;color:var(--text2)">${acc?acc.label:''}</td>
+          <td class="${res?'tx-res':plus?'tx-plus':'tx-minus'}">${plus?'+':''}${fmt(t.amount)}</td>
+          <td><span class="badge ${t.status==='завершена'?'bs':'bc'}">${t.status}</span></td>
+        </tr>`;
+      }).join('')
+    : `<tr><td colspan="5" class="empty">Операций пока нет</td></tr>`;
+}
+
+// ── render invoices ──
+function renderInvoices(){
+  const invs = invsForRole(role);
+  document.getElementById('invList').innerHTML = invs.length
+    ? invs.map(i=>{
+        const acc = DB.accounts.find(a=>a.accountId===i.accountId);
+        const sc = {'исполнено':'bs','на рассмотрении':'bp','создано':'bc','отклонено':'be','в обработке':'bc'}[i.status]||'bc';
+        const plus = i.type==='пополнение';
+        return `<div class="inv-item">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+            <div>
+              <div style="font-size:13px;font-weight:600;margin-bottom:2px">${i.description||i.type}</div>
+              <div style="font-size:11px;color:var(--text2)">${fmtDt(i.createdAt)} · ${acc?acc.displayNumber:''}</div>
+              <div style="font-size:10px;color:var(--text3);font-family:var(--mono);margin-top:2px">${i.requestId}</div>
+            </div>
+            <div style="text-align:right;flex-shrink:0">
+              <div style="font-size:14px;font-weight:700;margin-bottom:3px" class="${plus?'tx-plus':'tx-minus'}">${plus?'+':'−'}${fmt(i.amount)}</div>
+              <span class="badge ${sc}">${i.status}</span>
+            </div>
+          </div>
+        </div>`;
+      }).join('')
+    : `<div class="empty">Заявлений пока нет</div>`;
+}
+
+// ── render deposits ──
+function renderDeposits(){
+  document.getElementById('depList').innerHTML = DB.deposits.length
+    ? DB.deposits.map(d=>{
+        const sc = {'зарезервирован':'bc','переведён':'bs','снят резерв':'bs','отменён':'be'}[d.status]||'bc';
+        return `<div class="dep-item">
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+            <span style="font-weight:600">Торги № ${d.auctionId} · Лот ${d.tradeLotId}</span>
+            <span style="font-weight:700;color:var(--green-dark)">${fmt(d.amount)}</span>
+          </div>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--text2);margin-bottom:6px">
+            <span>${d.payer}</span><span>${fmtDt(d.reservedAt)}</span>
+            <span class="badge ${sc}">${d.status}</span>
+          </div>
+          <div style="font-size:10px;color:var(--text3);background:var(--bg3);padding:5px 8px;border-radius:6px;font-family:var(--mono)">
+            DepositID: ${d.depositId} · AllowedWithdrawalType: <b>${d.allowedWithdrawalType||'none'}</b>
+          </div>
+        </div>`;
+      }).join('')
+    : `<div class="empty">Задатков нет</div>`;
+}
+
+// ── render requisites ──
+function renderRequisites(){
+  const reqs = reqsForRole(role);
+  document.getElementById('reqList').innerHTML = reqs.length
+    ? reqs.map(r=>`
+        <div class="req-item">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <span style="font-size:14px;font-weight:600">${r.bankName}</span>
+            <div style="display:flex;gap:5px">
+              ${r.isDefault ? `<span class="badge bs">По умолчанию</span>` : ''}
+              <span class="badge ${r.isVerified?'bs':'bp'}">${r.isVerified?'Верифицированы':'Ожидают верификации'}</span>
+            </div>
+          </div>
+          <div class="reqblock">
+            <div class="rr"><span class="rk">Получатель</span><span class="rv">${r.fullName}</span></div>
+            <div class="rr"><span class="rk">ИНН / КПП</span><span class="rv">${r.inn}${r.kpp?' / '+r.kpp:''}</span></div>
+            <div class="rr"><span class="rk">БИК</span><span class="rv">${r.bik}</span></div>
+            <div class="rr"><span class="rk">Р/с</span><span class="rv">${r.accountNumber}</span></div>
+            <div class="rr"><span class="rk">RequisiteID</span><span class="rv" style="font-size:9px">${r.requisiteId}</span></div>
+          </div>
+        </div>`)
+      .join('')
+    : `<div class="empty">Реквизиты не добавлены</div>`;
+}
+
+function updateBadge(){
+  const n = invsForRole(role).filter(i=>['создано','в обработке','на рассмотрении'].includes(i.status)).length;
+  const el = document.getElementById('inv-badge');
+  el.textContent = n;
+  el.classList.toggle('show', n>0);
+}
+
+// ── navigation ──
+function showPg(name){
+  document.querySelectorAll('.pg').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.ni').forEach(n=>n.classList.remove('active'));
+  document.getElementById('pg-'+name).classList.add('active');
+  const ni = document.querySelector(`[data-pg="${name}"]`);
+  if(ni) ni.classList.add('active');
+}
+
+// ── modal helpers ──
+function openModal(name){
+  if(name==='addFunds')  renderFundsForm(null);
+  else if(name==='withdraw')   renderWithdrawForm(null);
+  else if(name==='payService') renderPayForm();
+  else if(name==='transfer')   renderTransferForm();
+  else if(name==='addReq')     renderAddReqForm();
+  document.getElementById('modal-'+name).classList.add('open');
+}
+function openFundsModal(accId){   renderFundsForm(accId);   document.getElementById('modal-addFunds').classList.add('open'); }
+function openWithdrawModal(accId){ renderWithdrawForm(accId); document.getElementById('modal-withdraw').classList.add('open'); }
+function closeModal(name){ document.getElementById('modal-'+name).classList.remove('open'); }
+function closeBg(e,name){ if(e.target===e.currentTarget) closeModal(name); }
+
+// ── ПОПОЛНЕНИЕ ──
+function renderFundsForm(accId){
+  const accs = accsForRole(role).filter(a=>a.subAccountTypeId!=='04');
+  document.getElementById('af-title').textContent = 'Пополнение счёта';
+  document.getElementById('addFunds-body').innerHTML = `
+    <div class="step-row">
+      <div class="step active">1. Параметры</div>
+      <div class="step">2. Реквизиты</div>
+      <div class="step">3. Готово</div>
+    </div>
+    <div class="fg">
+      <label class="fl">Счёт пополнения</label>
+      <select class="fi" id="af-acc">
+        ${accs.map(a=>`<option value="${a.accountId}" ${a.accountId===accId?'selected':''}>${a.label} (${a.displayNumber})</option>`).join('')}
+      </select>
+    </div>
+    <div class="fg">
+      <label class="fl">Сумма (необязательно)</label>
+      <input class="fi" type="number" id="af-amt" placeholder="Оставьте пустым — открытая сумма" min="1">
+      <div class="fh">Если не указана — бланк формируется без ограничений по сумме</div>
+    </div>
+    <div class="fg">
+      <label class="fl">Код торгов (необязательно)</label>
+      <input class="fi" type="text" id="af-trade" placeholder="Например: 4783">
+      <div class="fh">Для пополнения задаткового счёта к конкретным торгам</div>
+    </div>
+    <div class="ibox">После нажатия «Сформировать заявку» биллинг создаст запись в <b>Invoices</b> и передаст её в 1С (POST /invoices). Будут выданы реквизиты с <b>request_id</b> в назначении платежа. Статус отслеживается в разделе «Заявления».</div>`;
+  document.getElementById('addFunds-footer').innerHTML = `
+    <button class="btn" onclick="closeModal('addFunds')">Отмена</button>
+    <button class="btn btn-p" id="af-submit" onclick="submitFunds()">Сформировать заявку</button>`;
+}
+
+function submitFunds(){
+  const btn = document.getElementById('af-submit');
+  const accId = document.getElementById('af-acc').value;
+  const amtRaw = document.getElementById('af-amt').value;
+  const trade = document.getElementById('af-trade').value.trim();
+  const amt = amtRaw ? parseFloat(amtRaw) : 0;
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Формируем заявку...';
+
+  setTimeout(()=>{
+    const rid = reqIdGen('P');
+    DB.invoices.unshift({
+      invoiceId: genId('INV'), accountId: accId,
+      type: 'пополнение', status: 'создано', amount: amt, requestId: rid,
+      createdAt: new Date().toISOString(),
+      description: 'Пополнение счёта' + (trade ? ' (торги '+trade+')' : '')
+    });
+    saveDB(); updateBadge(); renderInvoices();
+
+    const acc = DB.accounts.find(a=>a.accountId===accId);
+    const amtTxt = amt ? fmt(amt) : 'Открытая сумма';
+
+    document.getElementById('af-title').textContent = 'Реквизиты для оплаты';
+    document.getElementById('addFunds-body').innerHTML = `
+      <div class="step-row">
+        <div class="step done">1. Параметры</div>
+        <div class="step active">2. Реквизиты</div>
+        <div class="step">3. Готово</div>
+      </div>
+      <div class="qr-wrap">
+        <svg width="110" height="110" viewBox="0 0 110 110" xmlns="http://www.w3.org/2000/svg" style="display:block;margin:0 auto 10px">
+          <rect width="110" height="110" fill="white" rx="4"/>
+          <rect x="7" y="7" width="30" height="30" rx="2" fill="none" stroke="#185FA5" stroke-width="2.5"/><rect x="13" y="13" width="18" height="18" rx="1" fill="#185FA5"/>
+          <rect x="73" y="7" width="30" height="30" rx="2" fill="none" stroke="#185FA5" stroke-width="2.5"/><rect x="79" y="13" width="18" height="18" rx="1" fill="#185FA5"/>
+          <rect x="7" y="73" width="30" height="30" rx="2" fill="none" stroke="#185FA5" stroke-width="2.5"/><rect x="13" y="79" width="18" height="18" rx="1" fill="#185FA5"/>
+          <rect x="45" y="7" width="5" height="5" fill="#185FA5"/><rect x="53" y="7" width="5" height="5" fill="#185FA5"/>
+          <rect x="45" y="15" width="5" height="5" fill="#185FA5"/><rect x="61" y="15" width="5" height="5" fill="#185FA5"/>
+          <rect x="53" y="23" width="5" height="5" fill="#185FA5"/><rect x="45" y="31" width="5" height="5" fill="#185FA5"/>
+          <rect x="45" y="45" width="5" height="5" fill="#185FA5"/><rect x="55" y="45" width="5" height="5" fill="#185FA5"/>
+          <rect x="65" y="45" width="5" height="5" fill="#185FA5"/><rect x="75" y="45" width="5" height="5" fill="#185FA5"/>
+          <rect x="85" y="45" width="5" height="5" fill="#185FA5"/><rect x="95" y="45" width="5" height="5" fill="#185FA5"/>
+          <rect x="45" y="55" width="5" height="5" fill="#185FA5"/><rect x="75" y="55" width="5" height="5" fill="#185FA5"/>
+          <rect x="45" y="65" width="5" height="5" fill="#185FA5"/><rect x="65" y="65" width="5" height="5" fill="#185FA5"/>
+          <rect x="85" y="65" width="5" height="5" fill="#185FA5"/><rect x="55" y="75" width="5" height="5" fill="#185FA5"/>
+          <rect x="75" y="75" width="5" height="5" fill="#185FA5"/><rect x="95" y="75" width="5" height="5" fill="#185FA5"/>
+          <rect x="45" y="85" width="5" height="5" fill="#185FA5"/><rect x="65" y="85" width="5" height="5" fill="#185FA5"/>
+          <rect x="85" y="85" width="5" height="5" fill="#185FA5"/><rect x="95" y="85" width="5" height="5" fill="#185FA5"/>
+        </svg>
+        <div style="font-size:11px;color:#666">QR для оплаты · ${amtTxt}</div>
+      </div>
+      <div class="reqblock">
+        <div class="rr"><span class="rk">Получатель</span><span class="rv">АО «Центр дистанционных торгов»</span></div>
+        <div class="rr"><span class="rk">ИНН / КПП</span><span class="rv">7812345678 / 780101001</span></div>
+        <div class="rr"><span class="rk">Банк</span><span class="rv">АО «Тинькофф Банк»</span></div>
+        <div class="rr"><span class="rk">БИК</span><span class="rv">044525974</span></div>
+        <div class="rr"><span class="rk">Р/с</span><span class="rv">40702810000001234567</span></div>
+        <div class="rr"><span class="rk">Назначение платежа</span><span class="rv hl">${rid}</span></div>
+        ${amt ? `<div class="rr"><span class="rk">Сумма</span><span class="rv hl">${amtTxt}</span></div>` : ''}
+        <div class="rr"><span class="rk">Счёт</span><span class="rv">${acc?acc.displayNumber:''}</span></div>
+      </div>
+      <div style="font-size:11px;color:var(--text2);margin-top:10px;background:var(--bg3);padding:8px 12px;border-radius:var(--radius);line-height:1.6">
+        Заявка <b>${rid}</b> создана и передана в 1С. Биллинг ожидает поступления платежа (поллинг GET /orders/statuses). Статус — в разделе <b>«Заявления»</b>. Окно можно закрыть.
+      </div>`;
+    document.getElementById('addFunds-footer').innerHTML = `<button class="btn btn-p" onclick="closeModal('addFunds')">Понятно, закрыть</button>`;
+  }, 600);
+}
+
+// ── ВЫВОД ──
+function renderWithdrawForm(accId){
+  const accs = accsForRole(role).filter(a=>a.subAccountTypeId==='01'||a.subAccountTypeId==='02');
+  const reqs = reqsForRole(role).filter(r=>r.isVerified);
+  document.getElementById('withdraw-body').innerHTML = `
+    <div class="fg">
+      <label class="fl">Счёт списания</label>
+      <select class="fi" id="wd-acc">
+        ${accs.map(a=>`<option value="${a.accountId}" ${a.accountId===accId?'selected':''}>${a.label} — свободно: ${fmt(a.balanceFree)}</option>`).join('')}
+      </select>
+    </div>
+    <div class="fg">
+      <label class="fl">Сумма</label>
+      <input class="fi" type="number" id="wd-amt" placeholder="Введите сумму" min="1">
+      <div class="err-msg" id="wd-err"></div>
+    </div>
+    <div class="fg">
+      <label class="fl">Тип вывода</label>
+      <select class="fi" id="wd-type">
+        <option value="own">На свои реквизиты</option>
+        ${role==='ot' ? '<option value="debtor">На реквизиты должника</option><option value="offset">Зачёт в счёт услуг</option>' : ''}
+      </select>
+    </div>
+    <div class="fg">
+      <label class="fl">Реквизиты получателя</label>
+      ${reqs.length
+        ? `<select class="fi" id="wd-req">${reqs.map(r=>`<option value="${r.requisiteId}">${r.fullName} · ...${r.accountNumber.slice(-4)} · ${r.bankName}</option>`).join('')}</select>`
+        : `<div class="wbox">Нет верифицированных реквизитов. Добавьте в разделе «Реквизиты».</div>`}
+    </div>
+    <div class="wbox">Средства в резерве (BalanceReserved) и задатки выводу не подлежат. Только свободные средства (BalanceFree).</div>`;
+  document.getElementById('withdraw-footer').innerHTML = `
+    <button class="btn" onclick="closeModal('withdraw')">Отмена</button>
+    <button class="btn btn-p" id="wd-submit" ${reqs.length?'':'disabled'} onclick="submitWithdraw()">Подать заявление</button>`;
+}
+
+function submitWithdraw(){
+  const accId = document.getElementById('wd-acc').value;
+  const amtRaw = document.getElementById('wd-amt').value;
+  const errEl = document.getElementById('wd-err');
+  errEl.textContent = '';
+  if(!amtRaw||isNaN(parseFloat(amtRaw))||parseFloat(amtRaw)<=0){ errEl.textContent='Укажите корректную сумму'; return; }
+  const amt = parseFloat(amtRaw);
+  const acc = DB.accounts.find(a=>a.accountId===accId);
+  if(acc.balanceFree < amt){ errEl.textContent=`Недостаточно средств. Доступно: ${fmt(acc.balanceFree)}`; return; }
+
+  const btn = document.getElementById('wd-submit');
+  btn.disabled=true; btn.innerHTML='<span class="spinner"></span>Создаём заявление...';
+
+  setTimeout(()=>{
+    acc.balanceFree -= amt; acc.balanceReserved += amt;
+    const rid = reqIdGen('W');
+    DB.invoices.unshift({invoiceId:genId('INV'),accountId:accId,type:'вывод',status:'на рассмотрении',amount:amt,requestId:rid,createdAt:new Date().toISOString(),description:'Вывод д/с на реквизиты'});
+    DB.transactions.unshift({txId:genId('TX'),accountId:accId,type:'вывод',status:'в обработке',amount:-amt,createdAt:new Date().toISOString(),description:'Вывод ('+rid+')'});
+    saveDB(); renderAll();
+    document.getElementById('withdraw-body').innerHTML = `
+      <div class="sbox">
+        <div class="si">✓</div>
+        <div class="st">Заявление подано</div>
+        <div class="ss">Сумма зарезервирована (BalanceFree → BalanceReserved).<br>Заявление передано в 1С (${rid}).<br>Статус отслеживайте в разделе «Заявления».</div>
+      </div>`;
+    document.getElementById('withdraw-footer').innerHTML = `<button class="btn btn-p" onclick="closeModal('withdraw')">Закрыть</button>`;
+  }, 500);
+}
+
+// ── ОПЛАТА УСЛУГ ──
+function renderPayForm(){
+  const servAcc = accsForRole(role).find(a=>a.subAccountTypeId==='01'||a.subAccountTypeId==='02');
+  const services = [
+    {id:'acc',name:'Аккредитация на ЭТП',     price:5400},
+    {id:'pub',name:'Публикация торгов',         price:12000},
+    {id:'cer',name:'Получение сертификата ЭП', price:3200},
+    {id:'mch',name:'Сервис МЧД',               price:1500},
+  ];
+  document.getElementById('payService-body').innerHTML = `
+    <div class="fg">
+      <label class="fl">Услуга</label>
+      <select class="fi" id="ps-svc">
+        ${services.map(s=>`<option value="${s.id}" data-price="${s.price}">${s.name} — ${fmt(s.price)}</option>`).join('')}
+      </select>
+    </div>
+    <div class="fg">
+      <label class="fl">Списание со счёта</label>
+      <select class="fi"><option>${servAcc?.label||''} (${servAcc?.displayNumber||''}) — доступно: ${fmt(servAcc?.balanceFree||0)}</option></select>
+    </div>
+    <div class="ibox">Списание выполняется <b>немедленно</b> без ожидания подтверждения от 1С. 1С получает синхронный запрос POST /service-payments для формирования Акта выполненных работ.</div>`;
+  document.getElementById('payService-footer').innerHTML = `
+    <button class="btn" onclick="closeModal('payService')">Отмена</button>
+    <button class="btn btn-p" id="ps-submit" onclick="submitPay()">Оплатить</button>`;
+}
+
+function submitPay(){
+  const servAcc = accsForRole(role).find(a=>a.subAccountTypeId==='01'||a.subAccountTypeId==='02');
+  const sel = document.getElementById('ps-svc');
+  const price = parseFloat(sel.options[sel.selectedIndex].dataset.price);
+  const name  = sel.options[sel.selectedIndex].text.split(' —')[0];
+  if(!servAcc||servAcc.balanceFree<price){ alert('Недостаточно средств на счёте услуг'); return; }
+  const btn = document.getElementById('ps-submit');
+  btn.disabled=true; btn.innerHTML='<span class="spinner"></span>';
+  setTimeout(()=>{
+    servAcc.balanceFree -= price;
+    const rid = reqIdGen('S');
+    DB.invoices.unshift({invoiceId:genId('INV'),accountId:servAcc.accountId,type:'оплата услуги',status:'исполнено',amount:price,requestId:rid,createdAt:new Date().toISOString(),description:name});
+    DB.transactions.unshift({txId:genId('TX'),accountId:servAcc.accountId,type:'оплата услуги',status:'завершена',amount:-price,createdAt:new Date().toISOString(),description:name});
+    saveDB(); renderAll();
+    document.getElementById('payService-body').innerHTML = `<div class="sbox"><div class="si">✓</div><div class="st">Оплата выполнена</div><div class="ss">Средства списаны немедленно с субсчёта услуг.<br>Уведомление отправлено в 1С. Акт выполненных работ будет сформирован.</div></div>`;
+    document.getElementById('payService-footer').innerHTML = `<button class="btn btn-p" onclick="closeModal('payService')">Закрыть</button>`;
+  }, 400);
+}
+
+// ── ПЕРЕВОД (только ОТ) ──
+function renderTransferForm(){
+  const accs = accsForRole('ot');
+  document.getElementById('transfer-body').innerHTML = `
+    <div class="ibox">Доступно только для Организатора торгов. Перевод между счётом услуг (02) и задатковым счётом (04). Документ в 1С УНФ — Платёжное поручение (тип «Перевод на другой счёт»).</div>
+    <div class="fg"><label class="fl">Источник</label>
+      <select class="fi" id="tr-from">${accs.map(a=>`<option value="${a.accountId}">${a.label} — ${fmt(a.balanceFree)}</option>`).join('')}</select></div>
+    <div class="fg"><label class="fl">Назначение</label>
+      <select class="fi" id="tr-to">${[...accs].reverse().map(a=>`<option value="${a.accountId}">${a.label}</option>`).join('')}</select></div>
+    <div class="fg"><label class="fl">Сумма</label>
+      <input class="fi" type="number" id="tr-amt" placeholder="Введите сумму" min="1">
+      <div class="err-msg" id="tr-err"></div></div>`;
+  document.getElementById('transfer-footer').innerHTML = `
+    <button class="btn" onclick="closeModal('transfer')">Отмена</button>
+    <button class="btn btn-p" id="tr-submit" onclick="submitTransfer()">Перевести</button>`;
+}
+
+function submitTransfer(){
+  const fromId=document.getElementById('tr-from').value, toId=document.getElementById('tr-to').value;
+  const amtRaw=document.getElementById('tr-amt').value, errEl=document.getElementById('tr-err');
+  errEl.textContent='';
+  if(fromId===toId){errEl.textContent='Источник и назначение должны отличаться';return;}
+  if(!amtRaw||parseFloat(amtRaw)<=0){errEl.textContent='Укажите корректную сумму';return;}
+  const amt=parseFloat(amtRaw), from=DB.accounts.find(a=>a.accountId===fromId);
+  if(from.balanceFree<amt){errEl.textContent=`Недостаточно средств. Доступно: ${fmt(from.balanceFree)}`;return;}
+  const btn=document.getElementById('tr-submit'); btn.disabled=true; btn.innerHTML='<span class="spinner"></span>';
+  setTimeout(()=>{
+    from.balanceFree-=amt; from.balanceReserved+=amt;
+    const rid=reqIdGen('T');
+    DB.invoices.unshift({invoiceId:genId('INV'),accountId:fromId,type:'межсчётовый перевод',status:'в обработке',amount:amt,requestId:rid,createdAt:new Date().toISOString(),description:'Перевод между субсчетами'});
+    DB.transactions.unshift({txId:genId('TX'),accountId:fromId,type:'перевод между субсчетами',status:'в обработке',amount:-amt,createdAt:new Date().toISOString(),description:'Перевод ('+rid+')'});
+    saveDB(); renderAll();
+    document.getElementById('transfer-body').innerHTML=`<div class="sbox"><div class="si">✓</div><div class="st">Перевод создан</div><div class="ss">Заявка передана в 1С УНФ (${rid}).<br>После исполнения балансы обоих субсчетов обновятся.</div></div>`;
+    document.getElementById('transfer-footer').innerHTML=`<button class="btn btn-p" onclick="closeModal('transfer')">Закрыть</button>`;
+  },400);
+}
+
+// ── ДОБАВИТЬ РЕКВИЗИТЫ ──
+function renderAddReqForm(){
+  const accs = accsForRole(role).filter(a=>a.subAccountTypeId==='01'||a.subAccountTypeId==='02');
+  document.getElementById('addReq-body').innerHTML = `
+    <div class="wbox">Новые реквизиты получат статус «Ожидают верификации». Вывод д/с по ним будет доступен только после одобрения оператором ЭТП.</div>
+    <div class="fg"><label class="fl">Привязать к счёту</label>
+      <select class="fi" id="rq-acc">${accs.map(a=>`<option value="${a.accountId}">${a.label} (${a.displayNumber})</option>`).join('')}</select></div>
+    <div class="fg"><label class="fl">Наименование получателя <span style="color:var(--red)">*</span></label>
+      <input class="fi" id="rq-name" placeholder="ООО «Название»"></div>
+    <div class="fg"><label class="fl">ИНН <span style="color:var(--red)">*</span></label>
+      <input class="fi" id="rq-inn" placeholder="7812345678" maxlength="12"></div>
+    <div class="fg"><label class="fl">КПП (для юр. лиц)</label>
+      <input class="fi" id="rq-kpp" placeholder="780101001" maxlength="9"></div>
+    <div class="fg"><label class="fl">Наименование банка <span style="color:var(--red)">*</span></label>
+      <input class="fi" id="rq-bank" placeholder="ПАО «Сбербанк»"></div>
+    <div class="fg"><label class="fl">БИК <span style="color:var(--red)">*</span></label>
+      <input class="fi" id="rq-bik" placeholder="044525225" maxlength="9"></div>
+    <div class="fg"><label class="fl">Расчётный счёт <span style="color:var(--red)">*</span></label>
+      <input class="fi" id="rq-acn" placeholder="40702810000000000000" maxlength="20"></div>
+    <div class="err-msg" id="rq-err"></div>`;
+  document.getElementById('addReq-footer').innerHTML = `
+    <button class="btn" onclick="closeModal('addReq')">Отмена</button>
+    <button class="btn btn-p" id="rq-submit" onclick="submitReq()">Добавить реквизиты</button>`;
+}
+
+function submitReq(){
+  const g = id => (document.getElementById(id)?.value||'').trim();
+  const name=g('rq-name'), inn=g('rq-inn'), bank=g('rq-bank'), bik=g('rq-bik'), acn=g('rq-acn'), kpp=g('rq-kpp');
+  const accId = document.getElementById('rq-acc').value;
+  const errEl = document.getElementById('rq-err');
+  if(!name||!inn||!bank||!bik||!acn){ errEl.textContent='Заполните все обязательные поля (*)'; return; }
+  const btn = document.getElementById('rq-submit');
+  btn.disabled=true; btn.innerHTML='<span class="spinner"></span>Сохраняем...';
+  setTimeout(()=>{
+    const existing = DB.requisites.filter(r=>r.accountId===accId);
+    DB.requisites.push({
+      requisiteId: genId('REQ'), accountId: accId,
+      bankName: bank, bik: bik, corAccount: '', accountNumber: acn,
+      inn: inn, kpp: kpp, fullName: name,
+      isVerified: false, isDefault: existing.length===0,
+      createdAt: new Date().toISOString()
+    });
+    saveDB(); renderRequisites(); closeModal('addReq'); showPg('requisites');
+  }, 400);
+}
+
+// ── init ──
+loadDB();
+role = DB._role || 'ut';
+document.getElementById('roleSelect').value = role;
+document.getElementById('urole').textContent = role==='ut' ? 'Участник торгов' : 'Организатор торгов';
+renderAll();
+</script>
+</body>
+</html>
