@@ -1,4 +1,4 @@
-const STORE_KEY = 'cdt_billing_v14';
+const STORE_KEY = 'cdt_billing_v17';
 
 const USERS = [
   { userId:'USR-UT1', name:'Иванов Константин', initials:'КИ', role:'ut', label:'УТ 1' },
@@ -48,7 +48,7 @@ const ACC_TYPE_LABEL = {
 
 function buildSeed() {
   return {
-    _v: 14,
+    _v: 17,
     currentUserId: 'USR-UT1',
     auctions: buildAuctions(),
     accounts: [
@@ -103,7 +103,7 @@ function clearAllData(db) {
 }
 
 function loadDB() {
-  try { const raw=localStorage.getItem(STORE_KEY); if(raw){const p=JSON.parse(raw);if(p._v===14)return p;} } catch(e){}
+  try { const raw=localStorage.getItem(STORE_KEY); if(raw){const p=JSON.parse(raw);if(p._v===17)return p;} } catch(e){}
   const db=buildSeed(); saveDB(db); return db;
 }
 function saveDB(db)  { try{localStorage.setItem(STORE_KEY,JSON.stringify(db));}catch(e){} }

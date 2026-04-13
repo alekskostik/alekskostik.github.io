@@ -20,16 +20,16 @@ document.addEventListener('alpine:init', () => {
     CDT_NAME:'АО «Центр дистанционных торгов»', CDT_INN_KPP:'7812345678 / 780101001',
     CDT_BANK:'АО «Тинькофф Банк»', CDT_BIK:'044525974', CDT_RS:'40702810000001234567',
 
-    init() { applyTheme(this.theme); },
+    init() { applyTheme(this.theme); this.$nextTick(()=>this.checkExpiredAllocations()); },
 
     get currentUser()   { return USERS.find(u=>u.userId===this.db.currentUserId); },
     get currentUserId() { return this.db.currentUserId; },
     get currentRole()   { return this.currentUser?.role||'ut'; },
     get isAdmin()       { return this.currentRole==='admin'; },
-    switchUser(uid)     { this.db.currentUserId=uid; saveDB(this.db); this.page=this.isAdmin?'adminAccounts':'wallet'; },
+    switchUser(uid)     { this.db.currentUserId=uid; saveDB(this.db); this.checkExpiredAllocations(); this.page=this.isAdmin?'adminAccounts':'wallet'; },
 
     setTheme(t)     { this.theme=t; applyTheme(t); },
-    setPage(p)      { this.page=p; },
+    setPage(p)      { this.checkExpiredAllocations(); this.page=p; },
     openModal(name) { this.modal=name; this.mStep=0; },
     closeModal()    { this.modal=null; this.mStep=0; },
 
@@ -307,7 +307,32 @@ document.addEventListener('alpine:init', () => {
         const receiverAcc=dep?.receiverAccountId?this.db.accounts.find(a=>a.accountId===dep.receiverAccountId):null;
         if(idx===0){
           app.status='победитель';
-          if(dep&&payerAcc&&receiverAcc){ payerAcc.balanceReserved=Math.max(0,payerAcc.balanceReserved-dep.amount); receiverAcc.balanceFree+=dep.amount; dep.status='переведён'; dep.releasedAt=now; dep.allowedWithdrawalType='debtor'; this.db.transactions.unshift({txId:genId('TX'),accountId:payerAcc.accountId,type:'перевод задатка',status:'завершена',amount:-dep.amount,createdAt:now,description:'Задаток переведён организатору (торги '+auc.auctionId+')'}); this.db.transactions.unshift({txId:genId('TX'),accountId:receiverAcc.accountId,type:'перевод задатка',status:'завершена',amount:dep.amount,createdAt:now,description:'Задаток победителя (торги '+auc.auctionId+')'}); }
+          if(dep&&payerAcc&&receiverAcc){
+            payerAcc.balanceReserved=Math.max(0,payerAcc.balanceReserved-dep.amount);
+            receiverAcc.balanceFree+=dep.amount;
+            dep.status='переведён'; dep.releasedAt=now; dep.allowedWithdrawalType='debtor';
+            // погашаем аллокации на виртуальную часть задатка (FIFO)
+            if((dep.virtualAmount||0)>0){
+              let virtRemain=dep.virtualAmount;
+              (this.db.virtualAllocations||[])
+                .filter(a=>a.accountId===dep.payerAccountId&&a.status==='active'&&a.repaidAmount<a.originalAmount)
+                .sort((a,b)=>new Date(a.createdAt)-new Date(b.createdAt))
+                .forEach(a=>{
+                  if(virtRemain<=0) return;
+                  const pay=Math.min(a.originalAmount-a.repaidAmount, virtRemain);
+                  a.repaidAmount+=pay; virtRemain-=pay;
+                  if(a.repaidAmount>=a.originalAmount) a.status='repaid';
+                });
+              // пересчитываем balanceVirtual
+              payerAcc.balanceVirtual=(this.db.virtualAllocations||[])
+                .filter(a=>a.accountId===dep.payerAccountId&&a.status==='active')
+                .reduce((s,a)=>s+Math.max(0,a.originalAmount-a.repaidAmount),0);
+              if(dep.virtualAmount>0)
+                this.db.transactions.unshift({txId:genId('TX'),accountId:payerAcc.accountId,type:'погашение виртуальных д/с',status:'завершена',amount:-dep.virtualAmount,createdAt:now,description:'Погашение виртуальных д/с при переводе задатка (торги '+auc.auctionId+')'});
+            }
+            this.db.transactions.unshift({txId:genId('TX'),accountId:payerAcc.accountId,type:'перевод задатка',status:'завершена',amount:-dep.amount,createdAt:now,description:'Задаток переведён организатору (торги '+auc.auctionId+')'});
+            this.db.transactions.unshift({txId:genId('TX'),accountId:receiverAcc.accountId,type:'перевод задатка',status:'завершена',amount:dep.amount,createdAt:now,description:'Задаток победителя (торги '+auc.auctionId+')'});
+          }
         } else if(idx===1){
           app.status='второй участник';
           if(dep){ dep.holdUntilContract=true; dep.status='удерживается'; dep.releaseAfter=new Date(new Date(now).getTime()+24*60*60*1000).toISOString(); }
@@ -335,7 +360,30 @@ document.addEventListener('alpine:init', () => {
           const dep=this.db.deposits.find(d=>d.depositId===second.depositId);
           const payerAcc=dep?this.db.accounts.find(a=>a.accountId===dep.payerAccountId):null;
           const receiverAcc=dep?.receiverAccountId?this.db.accounts.find(a=>a.accountId===dep.receiverAccountId):null;
-          if(dep&&payerAcc&&receiverAcc){ payerAcc.balanceReserved=Math.max(0,payerAcc.balanceReserved-dep.amount); receiverAcc.balanceFree+=dep.amount; dep.status='переведён'; dep.releasedAt=now; dep.holdUntilContract=false; dep.allowedWithdrawalType='debtor'; this.db.transactions.unshift({txId:genId('TX'),accountId:payerAcc.accountId,type:'перевод задатка',status:'завершена',amount:-dep.amount,createdAt:now,description:'Задаток переведён (договор со вторым, торги '+auc.auctionId+')'}); this.db.transactions.unshift({txId:genId('TX'),accountId:receiverAcc.accountId,type:'перевод задатка',status:'завершена',amount:dep.amount,createdAt:now,description:'Задаток второго участника (торги '+auc.auctionId+')'}); }
+          if(dep&&payerAcc&&receiverAcc){
+            payerAcc.balanceReserved=Math.max(0,payerAcc.balanceReserved-dep.amount);
+            receiverAcc.balanceFree+=dep.amount;
+            dep.status='переведён'; dep.releasedAt=now; dep.holdUntilContract=false; dep.allowedWithdrawalType='debtor';
+            if((dep.virtualAmount||0)>0){
+              let virtRemain=dep.virtualAmount;
+              (this.db.virtualAllocations||[])
+                .filter(a=>a.accountId===dep.payerAccountId&&a.status==='active'&&a.repaidAmount<a.originalAmount)
+                .sort((a,b)=>new Date(a.createdAt)-new Date(b.createdAt))
+                .forEach(a=>{
+                  if(virtRemain<=0) return;
+                  const pay=Math.min(a.originalAmount-a.repaidAmount, virtRemain);
+                  a.repaidAmount+=pay; virtRemain-=pay;
+                  if(a.repaidAmount>=a.originalAmount) a.status='repaid';
+                });
+              payerAcc.balanceVirtual=(this.db.virtualAllocations||[])
+                .filter(a=>a.accountId===dep.payerAccountId&&a.status==='active')
+                .reduce((s,a)=>s+Math.max(0,a.originalAmount-a.repaidAmount),0);
+              if(dep.virtualAmount>0)
+                this.db.transactions.unshift({txId:genId('TX'),accountId:payerAcc.accountId,type:'погашение виртуальных д/с',status:'завершена',amount:-dep.virtualAmount,createdAt:now,description:'Погашение виртуальных д/с при переводе задатка (торги '+auc.auctionId+')'});
+            }
+            this.db.transactions.unshift({txId:genId('TX'),accountId:payerAcc.accountId,type:'перевод задатка',status:'завершена',amount:-dep.amount,createdAt:now,description:'Задаток переведён (договор со вторым, торги '+auc.auctionId+')'});
+            this.db.transactions.unshift({txId:genId('TX'),accountId:receiverAcc.accountId,type:'перевод задатка',status:'завершена',amount:dep.amount,createdAt:now,description:'Задаток второго участника (торги '+auc.auctionId+')'});
+          }
         }
       }
       saveDB(this.db); this.closeModal();
@@ -376,17 +424,23 @@ document.addEventListener('alpine:init', () => {
       alloc.status='cancelled';
       if(acc) acc.balanceVirtual=Math.max(0,(acc.balanceVirtual||0)-remaining);
       const now=new Date().toISOString();
-      this.db.transactions.unshift({txId:genId('TX'),accountId:alloc.accountId,type:'аннуляция виртуальных средств',status:'завершена',amount:-remaining,createdAt:now,description:'Аннуляция виртуальных средств: '+alloc.description});
+      this.db.transactions.unshift({txId:genId('TX'),accountId:alloc.accountId,type:'аннуляция виртуальных средств',status:'завершена',amount:-remaining,createdAt:now,description:'Аннуляция виртуальных д/с ('+fmt(remaining)+')'});
       // сценарий А: задаток не завершён → отзыв
       const dep=this.db.deposits.find(d=>d.payerAccountId===alloc.accountId&&(d.virtualAmount||0)>0&&d.status==='зарезервирован');
       if(dep){
         const payerAcc=this.db.accounts.find(a=>a.accountId===dep.payerAccountId);
-        if(payerAcc){ payerAcc.balanceReserved=Math.max(0,payerAcc.balanceReserved-dep.amount); payerAcc.balanceFree+=dep.amount; }
+        // возвращаем только реальную часть задатка (виртуальная уже была списана при резервировании)
+        const realPartOfDeposit=dep.amount-(dep.virtualAmount||0);
+        if(payerAcc){
+          payerAcc.balanceReserved=Math.max(0,payerAcc.balanceReserved-dep.amount);
+          if(realPartOfDeposit>0) payerAcc.balanceFree+=realPartOfDeposit;
+        }
         dep.status='снят резерв'; dep.releasedAt=now; dep.virtualAmount=0;
-        // снимаем заявку
         const app=this.db.tradeApplications.find(a=>a.depositId===dep.depositId);
-        if(app) app.status='отозвана (аннуляция вирт. средств)';
-        this.db.transactions.unshift({txId:genId('TX'),accountId:dep.payerAccountId,type:'отзыв задатка',status:'завершена',amount:dep.amount,createdAt:now,description:'Задаток отозван в связи с аннуляцией виртуальных средств (торги '+dep.auctionId+')'});
+        if(app){ app.status='отозвана (аннуляция вирт. средств)'; app.virtualAmount=0; }
+        // в транзакции показываем только реальную возвращённую сумму
+        const txAmt=realPartOfDeposit>0?realPartOfDeposit:0;
+        this.db.transactions.unshift({txId:genId('TX'),accountId:dep.payerAccountId,type:'отзыв задатка',status:'завершена',amount:txAmt,createdAt:now,description:'Задаток отозван — аннуляция виртуальных средств (торги '+dep.auctionId+')'});
       }
       // сценарий Б: торги завершены с вирт. средствами → приостановка
       const doneDep=this.db.deposits.find(d=>d.payerAccountId===alloc.accountId&&(d.virtualAmount||0)>0&&d.status==='переведён');

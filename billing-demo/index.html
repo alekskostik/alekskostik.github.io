@@ -301,14 +301,14 @@
           </div>
           <template x-if="auc.status==='Приём заявок'&&appsForAuction(auc.auctionId).length>0">
             <div>
-              <template x-if="appsForAuction(auc.auctionId)[0]&&(appsForAuction(auc.auctionId)[0].virtualAmount||0)>0">
+              <template x-if="appsForAuction(auc.auctionId).filter(a=>a.status==='принята')[0]&&(appsForAuction(auc.auctionId).filter(a=>a.status==='принята')[0].virtualAmount||0)>0">
                 <div class="wbox" style="margin-bottom:8px">
                   ⚠ Задаток первого участника содержит виртуальные средства (<b x-text="fmt(appsForAuction(auc.auctionId)[0].virtualAmount||0)"></b>).
                   Публикация протокола невозможна до погашения виртуальных средств участником.
                 </div>
               </template>
               <button class="btn btn-p btn-sm"
-                :disabled="appsForAuction(auc.auctionId)[0]&&(appsForAuction(auc.auctionId)[0].virtualAmount||0)>0"
+                :disabled="appsForAuction(auc.auctionId).filter(a=>a.status==='принята')[0]&&(appsForAuction(auc.auctionId).filter(a=>a.status==='принята')[0].virtualAmount||0)>0"
                 @click="openFinishAuction(auc.auctionId)">
                 Завершить приём заявок и опубликовать протокол
               </button>
@@ -453,16 +453,16 @@
   <!-- ══ ADMIN ══ -->
 
   <!-- ADMIN: Счета -->
-  <section class="pg" :class="{active:page==='adminAccounts'&&isAdmin}">
+  <section class="pg" :class="{active:page==='adminAccounts'&&isAdmin}" style="overflow-x:auto">
     <div class="ptitle">Счета участников</div>
     <div class="panel-warn">Администратор ЭТП. Блокировка счёта приостанавливает все операции по нему.</div>
-    <table class="admin-table">
-      <thead><tr><th>Пользователь</th><th>Счёт</th><th>Тип счёта</th><th>Свободно</th><th>В резерве</th><th>Виртуальные / долг</th><th>Статус</th><th>Действия</th></tr></thead>
+    <table class="admin-table" style="min-width:900px">
+      <thead><tr><th style="white-space:nowrap">Пользователь</th><th style="white-space:nowrap">Номер счёта</th><th style="white-space:nowrap">Тип</th><th style="white-space:nowrap">Свободно</th><th style="white-space:nowrap">В резерве</th><th>Виртуальные / долг</th><th>Статус</th><th>Действия</th></tr></thead>
       <tbody>
         <template x-for="acc in adminAllAccounts" :key="acc.accountId">
           <tr>
-            <td style="font-weight:500" x-text="acc.userName+' ('+acc.userLabel+')'"></td>
-            <td style="font-family:var(--mono);font-size:10px" x-text="acc.displayNumber"></td>
+            <td style="font-weight:500;white-space:nowrap" x-text="acc.userName+' ('+acc.userLabel+')'"></td>
+            <td style="font-family:var(--mono);font-size:10px;white-space:nowrap" x-text="acc.displayNumber"></td>
             <td style="font-size:11px" x-text="acc.typeLabel"></td>
             <td :class="acc.balanceFree>0?'tx-plus':''" x-text="fmt(acc.balanceFree)"></td>
             <td :class="acc.balanceReserved>0?'tx-res':''" x-text="fmt(acc.balanceReserved)"></td>
@@ -952,7 +952,7 @@
         <input class="fi" type="text" x-model="admVirtualDesc" placeholder="Например: компенсация по заявке №..."></div>
       <div class="fg">
         <label class="fl">Срок действия <span style="font-size:10px;color:var(--text3)">(по умолчанию 30 дней)</span></label>
-        <input class="fi" type="date" x-model="admVirtualExpiry">
+        <input class="fi" type="datetime-local" x-model="admVirtualExpiry">
         <div class="fh">По истечении срока средства аннулируются, задаток отзывается автоматически</div>
       </div>
       <div class="err-msg" x-text="admVirtualError"></div>
