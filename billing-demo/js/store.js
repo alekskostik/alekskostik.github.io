@@ -1,4 +1,4 @@
-const STORE_KEY = 'cdt_billing_v11';
+const STORE_KEY = 'cdt_billing_v14';
 
 const USERS = [
   { userId:'USR-UT1', name:'Иванов Константин', initials:'КИ', role:'ut', label:'УТ 1' },
@@ -48,7 +48,7 @@ const ACC_TYPE_LABEL = {
 
 function buildSeed() {
   return {
-    _v: 11,
+    _v: 14,
     currentUserId: 'USR-UT1',
     auctions: buildAuctions(),
     accounts: [
@@ -63,6 +63,9 @@ function buildSeed() {
     deposits: [],
     tradeApplications: [],
     principals: buildPrincipals(),
+    // virtualAllocations: { allocId, accountId, originalAmount, repaidAmount, status(active/repaid/cancelled), expiresAt, createdAt, description }
+    // долг = sum(originalAmount) по всем active записям; погашается реальными платежами FIFO
+    virtualAllocations: [],
     requisites: [
       { requisiteId:'REQ-UT1', accountId:'ACC-USR-UT1-01', bankName:'ПАО «Сбербанк»', bik:'044525225', corAccount:'30101810400000000225', accountNumber:'40702810938000123456', inn:'781234567890', kpp:'780101001', fullName:'ООО «Тест Трейд»',  isVerified:true,  isDefault:true, createdAt:'2026-03-01T00:00:00Z' },
       { requisiteId:'REQ-UT2', accountId:'ACC-USR-UT2-01', bankName:'АО «Тинькофф»',  bik:'044525974', corAccount:'30101810145250000974', accountNumber:'40702810000001234567', inn:'781234567891', kpp:'780101002', fullName:'ИП Петрова А.С.', isVerified:true,  isDefault:true, createdAt:'2026-03-01T00:00:00Z' },
@@ -94,12 +97,13 @@ function clearAllData(db) {
   db.transactions=[]; db.invoices=[]; db.deposits=[]; db.tradeApplications=[];
   db.auctions = buildAuctions();
   db.principals = buildPrincipals();
+  db.virtualAllocations = [];
   db.accounts.forEach(a=>{ a.balanceFree=0; a.balanceReserved=0; a.balanceVirtual=0; a.isBlocked=false; });
   saveDB(db);
 }
 
 function loadDB() {
-  try { const raw=localStorage.getItem(STORE_KEY); if(raw){const p=JSON.parse(raw);if(p._v===11)return p;} } catch(e){}
+  try { const raw=localStorage.getItem(STORE_KEY); if(raw){const p=JSON.parse(raw);if(p._v===14)return p;} } catch(e){}
   const db=buildSeed(); saveDB(db); return db;
 }
 function saveDB(db)  { try{localStorage.setItem(STORE_KEY,JSON.stringify(db));}catch(e){} }

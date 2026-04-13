@@ -14,7 +14,7 @@ document.addEventListener('alpine:init', () => {
     appAuctionId:null, appAmount:'', appError:'', appLoading:false,
     finishAuctionId:null,
     contractAuctionId:null, contractWith:null,
-    admVirtualAccId:null, admVirtualAmt:'', admVirtualDesc:'', admVirtualError:'',
+    admVirtualAccId:null, admVirtualAmt:'', admVirtualDesc:'', admVirtualExpiry:'', admVirtualError:'',
     prcName:'', prcInn:'', prcKpp:'', prcBank:'', prcBik:'', prcAccNum:'', prcError:'', prcLoading:false,
 
     CDT_NAME:'АО «Центр дистанционных торгов»', CDT_INN_KPP:'7812345678 / 780101001',
@@ -100,6 +100,13 @@ document.addEventListener('alpine:init', () => {
     get currentPayService() { return this.payServices.find(s=>s.id===this.payServiceId); },
     get servAcc()      { return this.serviceAccs[0]||null; },
     get servAccEffectiveBalance() { const acc=this.servAcc; if(!acc) return 0; return acc.balanceFree+(acc.balanceVirtual||0); },
+    // первое активное начисление (по ОТР тратится целиком)
+    get firstActiveAlloc() {
+      if(!this.servAcc) return null;
+      return (this.db.virtualAllocations||[])
+        .filter(a=>a.accountId===this.servAcc.accountId&&a.status==='active')
+        .sort((a,b)=>new Date(a.createdAt)-new Date(b.createdAt))[0]||null;
+    },
     get transferFrom() { return this.db.accounts.find(a=>a.userId===this.currentUserId&&a.subAccountTypeId==='04')||null; },
     get transferTo()   { return this.db.accounts.find(a=>a.userId===this.currentUserId&&a.subAccountTypeId==='02')||null; },
     get selectedWithdrawAcc() { return this.db.accounts.find(a=>a.accountId===this.wdAccId)||null; },
@@ -143,7 +150,7 @@ document.addEventListener('alpine:init', () => {
     openTradeApp(aid){ const auc=this.db.auctions.find(a=>a.auctionId===aid); this.appAuctionId=aid; this.appAmount=String(auc?.minDeposit||0); this.appError=''; this.appLoading=false; this.openModal('tradeApp'); },
     openFinishAuction(aid)  { this.finishAuctionId=aid; this.openModal('finishAuction'); },
     openSignContract(aid)   { this.contractAuctionId=aid; this.contractWith=null; this.openModal('signContract'); },
-    openAdmVirtual(accId)   { this.admVirtualAccId=accId; this.admVirtualAmt=''; this.admVirtualDesc=''; this.admVirtualError=''; this.openModal('admVirtual'); },
+    openAdmVirtual(accId)   { this.admVirtualAccId=accId; this.admVirtualAmt=''; this.admVirtualDesc=''; this.admVirtualExpiry=''; this.admVirtualError=''; this.checkExpiredAllocations(); this.openModal('admVirtual'); },
     openAddPrincipal()      { this.prcName=''; this.prcInn=''; this.prcKpp=''; this.prcBank=''; this.prcBik=''; this.prcAccNum=''; this.prcError=''; this.prcLoading=false; this.openModal('addPrincipal'); },
 
     get selectedDepositForWithdraw() {
@@ -261,12 +268,17 @@ document.addEventListener('alpine:init', () => {
       if(amt<auc.minDeposit){this.appError='Минимальная сумма: '+fmt(auc.minDeposit);return;}
       if(this.myAppForAuction(this.appAuctionId)){this.appError='Вы уже подали заявку';return;}
       const depAcc=this.db.accounts.find(a=>a.userId===this.currentUserId&&a.subAccountTypeId==='03');
-      if(!depAcc||depAcc.balanceFree<amt){this.appError='Недостаточно средств. Доступно: '+fmt(depAcc?.balanceFree||0);return;}
+      const depEffective=(depAcc?.balanceFree||0)+(depAcc?.balanceVirtual||0);
+      if(!depAcc||depEffective<amt){this.appError='Недостаточно средств. Доступно: '+fmt(depEffective);return;}
       this.appLoading=true;
       setTimeout(()=>{
         // п.2: сколько виртуальных идёт в задаток
-        const virtInDeposit=Math.min(depAcc.balanceVirtual||0, amt);
-        depAcc.balanceFree-=amt; depAcc.balanceReserved+=amt;
+        const fromRealDep=Math.min(depAcc.balanceFree, amt);
+        const fromVirtDep=amt-fromRealDep;
+        const virtInDeposit=fromVirtDep;
+        depAcc.balanceFree-=fromRealDep;
+        if(fromVirtDep>0) depAcc.balanceVirtual=Math.max(0,(depAcc.balanceVirtual||0)-fromVirtDep);
+        depAcc.balanceReserved+=amt;
         const depId=genId('DEP'); const otDepAcc=this.db.accounts.find(a=>a.userId===auc.organizerId&&a.subAccountTypeId==='04');
         this.db.deposits.unshift({depositId:depId,payerAccountId:depAcc.accountId,receiverAccountId:otDepAcc?.accountId||null,auctionId:auc.auctionId,tradeLotId:auc.lotId,amount:amt,virtualAmount:virtInDeposit,status:'зарезервирован',reservedAt:new Date().toISOString(),releasedAt:null,releaseAfter:null,holdUntilContract:false,payer:this.currentUser.name,allowedWithdrawalType:'none'});
         this.db.transactions.unshift({txId:genId('TX'),accountId:depAcc.accountId,type:'резервирование задатка',status:'завершена',amount:-amt,createdAt:new Date().toISOString(),description:'Задаток по торгам '+auc.auctionId+(virtInDeposit>0?' (вкл. '+fmt(virtInDeposit)+' вирт.)':'')});
@@ -338,12 +350,69 @@ document.addEventListener('alpine:init', () => {
       const acc=this.db.accounts.find(a=>a.accountId===this.admVirtualAccId);
       if(!acc){this.admVirtualError='Счёт не найден';return;}
       acc.balanceVirtual=(acc.balanceVirtual||0)+amt;
+      if(!this.db.virtualAllocations) this.db.virtualAllocations=[];
+      const defaultDays=30;
+      const expiresAt=this.admVirtualExpiry
+        ? new Date(this.admVirtualExpiry).toISOString()
+        : new Date(Date.now()+defaultDays*24*60*60*1000).toISOString();
+      this.db.virtualAllocations.push({
+        allocId:genId('VA'), accountId:this.admVirtualAccId,
+        originalAmount:amt, repaidAmount:0, status:'active',
+        expiresAt, createdAt:new Date().toISOString(),
+        description:(this.admVirtualDesc||'Начисление виртуальных средств (адм.)')
+      });
       this.db.transactions.unshift({txId:genId('TX'),accountId:this.admVirtualAccId,type:'начисление виртуальных средств',status:'завершена',amount:amt,createdAt:new Date().toISOString(),description:(this.admVirtualDesc||'Начисление виртуальных средств (адм.)')});
       saveDB(this.db); this.closeModal();
     },
 
     // п.3: конвертация виртуальных в реальные при подтверждении пополнения задаткового счёта
 
+
+    // Аннуляция одного начисления (ручная или автоматическая по сроку)
+    _annulAlloc(alloc) {
+      const acc=this.db.accounts.find(a=>a.accountId===alloc.accountId);
+      const remaining=alloc.originalAmount-alloc.repaidAmount;
+      if(remaining<=0){ alloc.status='cancelled'; return; }
+      alloc.status='cancelled';
+      if(acc) acc.balanceVirtual=Math.max(0,(acc.balanceVirtual||0)-remaining);
+      const now=new Date().toISOString();
+      this.db.transactions.unshift({txId:genId('TX'),accountId:alloc.accountId,type:'аннуляция виртуальных средств',status:'завершена',amount:-remaining,createdAt:now,description:'Аннуляция виртуальных средств: '+alloc.description});
+      // сценарий А: задаток не завершён → отзыв
+      const dep=this.db.deposits.find(d=>d.payerAccountId===alloc.accountId&&(d.virtualAmount||0)>0&&d.status==='зарезервирован');
+      if(dep){
+        const payerAcc=this.db.accounts.find(a=>a.accountId===dep.payerAccountId);
+        if(payerAcc){ payerAcc.balanceReserved=Math.max(0,payerAcc.balanceReserved-dep.amount); payerAcc.balanceFree+=dep.amount; }
+        dep.status='снят резерв'; dep.releasedAt=now; dep.virtualAmount=0;
+        // снимаем заявку
+        const app=this.db.tradeApplications.find(a=>a.depositId===dep.depositId);
+        if(app) app.status='отозвана (аннуляция вирт. средств)';
+        this.db.transactions.unshift({txId:genId('TX'),accountId:dep.payerAccountId,type:'отзыв задатка',status:'завершена',amount:dep.amount,createdAt:now,description:'Задаток отозван в связи с аннуляцией виртуальных средств (торги '+dep.auctionId+')'});
+      }
+      // сценарий Б: торги завершены с вирт. средствами → приостановка
+      const doneDep=this.db.deposits.find(d=>d.payerAccountId===alloc.accountId&&(d.virtualAmount||0)>0&&d.status==='переведён');
+      if(doneDep){
+        const auc=this.db.auctions.find(a=>a.auctionId===doneDep.auctionId);
+        if(auc&&auc.status==='Протокол опубликован') auc.status='Приостановлены';
+      }
+      saveDB(this.db);
+    },
+
+    // Проверяем и аннулируем просроченные начисления
+    checkExpiredAllocations() {
+      const now=new Date();
+      const expired=(this.db.virtualAllocations||[]).filter(a=>a.status==='active'&&new Date(a.expiresAt)<now);
+      expired.forEach(a=>this._annulAlloc(a));
+      if(expired.length>0) saveDB(this.db);
+      return expired.length;
+    },
+
+    // Ручная аннуляция администратором
+    adminAnnulAlloc(allocId) {
+      const alloc=(this.db.virtualAllocations||[]).find(a=>a.allocId===allocId);
+      if(!alloc||alloc.status!=='active') return;
+      if(!confirm('Аннулировать виртуальное начисление '+fmt(alloc.originalAmount-alloc.repaidAmount)+'?')) return;
+      this._annulAlloc(alloc);
+    },
 
     adminToggleBlock(accountId) { const acc=this.db.accounts.find(a=>a.accountId===accountId); if(!acc) return; if(!confirm((acc.isBlocked?'Разблокировать':'Заблокировать')+' счёт '+acc.displayNumber+'?'))return; acc.isBlocked=!acc.isBlocked; saveDB(this.db); },
     adminReleaseDeposit(depositId) { const dep=this.db.deposits.find(d=>d.depositId===depositId); if(!dep) return; if(!confirm('Принудительно снять резерв задатка '+fmt(dep.amount)+'?'))return; const payerAcc=this.db.accounts.find(a=>a.accountId===dep.payerAccountId); if(payerAcc){payerAcc.balanceReserved=Math.max(0,payerAcc.balanceReserved-dep.amount);payerAcc.balanceFree+=dep.amount;} dep.status='снят резерв'; dep.releasedAt=new Date().toISOString(); dep.releaseAfter=null; dep.allowedWithdrawalType='own'; this.db.transactions.unshift({txId:genId('TX'),accountId:dep.payerAccountId,type:'снятие резерва задатка',status:'завершена',amount:dep.amount,createdAt:new Date().toISOString(),description:'Принудительное снятие резерва (адм.)'}); saveDB(this.db); },
@@ -358,25 +427,40 @@ document.addEventListener('alpine:init', () => {
       if(inv.type==='пополнение'&&inv.amount>0){
         const acc=this.db.accounts.find(a=>a.accountId===inv.accountId);
         if(acc){
-          // сначала гасим виртуальный долг, остаток идёт на balanceFree
-          const virtDebt=acc.balanceVirtual||0;
-          const toRepay=Math.min(virtDebt, inv.amount);
-          const toFree=inv.amount-toRepay;
-          acc.balanceFree+=toFree;
-          if(toRepay>0){
-            acc.balanceVirtual=Math.max(0,virtDebt-toRepay);
-            // для задаткового — снижаем virtualAmount в задатках
+          // Долг = сумма незакрытых начислений (вариант А: долг = исходная сумма кредита)
+          const allocs=(this.db.virtualAllocations||[])
+            .filter(a=>a.accountId===inv.accountId&&a.status==='active'&&a.repaidAmount<a.originalAmount)
+            .sort((a,b)=>new Date(a.createdAt)-new Date(b.createdAt)); // FIFO
+          let remaining=inv.amount;
+          let totalRepaid=0;
+          for(const alloc of allocs){
+            if(remaining<=0) break;
+            const debt=alloc.originalAmount-alloc.repaidAmount;
+            const pay=Math.min(debt, remaining);
+            alloc.repaidAmount+=pay;
+            if(alloc.repaidAmount>=alloc.originalAmount) alloc.status='repaid';
+            remaining-=pay;
+            totalRepaid+=pay;
+          }
+          // обновляем balanceVirtual = сумма оставшегося долга по всем начислениям
+          acc.balanceVirtual=(this.db.virtualAllocations||[])
+            .filter(a=>a.accountId===inv.accountId&&a.status==='active')
+            .reduce((s,a)=>s+Math.max(0,a.originalAmount-a.repaidAmount),0);
+          // на balanceFree идёт только то, что не ушло на погашение долга
+          acc.balanceFree+=remaining; // remaining = inv.amount - totalRepaid
+          if(totalRepaid>0){
+            // для задаткового — пересчитываем virtualAmount в задатках пропорционально
             if(acc.subAccountTypeId==='03'){
-              let remaining=toRepay;
+              let rem=totalRepaid;
               this.db.deposits.filter(d=>d.payerAccountId===inv.accountId&&(d.virtualAmount||0)>0).forEach(d=>{
-                const reduce=Math.min(d.virtualAmount||0, remaining);
+                const reduce=Math.min(d.virtualAmount||0,rem);
                 d.virtualAmount=Math.max(0,(d.virtualAmount||0)-reduce);
-                remaining-=reduce;
+                rem-=reduce;
                 const app=this.db.tradeApplications.find(a=>a.depositId===d.depositId);
                 if(app) app.virtualAmount=d.virtualAmount;
               });
             }
-            this.db.transactions.unshift({txId:genId('TX'),accountId:inv.accountId,type:'погашение виртуальных средств',status:'завершена',amount:-toRepay,createdAt:now,description:'Погашение виртуальных средств ('+fmt(toRepay)+')'});
+            this.db.transactions.unshift({txId:genId('TX'),accountId:inv.accountId,type:'погашение виртуальных средств',status:'завершена',amount:-totalRepaid,createdAt:now,description:'Погашение виртуальных д/с ('+fmt(totalRepaid)+')'});
           }
           this.db.transactions.unshift({txId:genId('TX'),accountId:inv.accountId,type:'пополнение',status:'завершена',amount:inv.amount,createdAt:now,description:inv.description+' (подтверждено)'});
         }

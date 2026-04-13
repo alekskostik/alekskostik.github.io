@@ -134,10 +134,16 @@
           <div class="acc-free">
             <span x-text="fmt(acc.balanceFree)"></span>
             <template x-if="acc.balanceVirtual>0">
-              <span style="font-size:14px;color:var(--green-dk);font-weight:500;margin-left:6px" x-text="'+ '+fmt(acc.balanceVirtual)+' вирт.'" title="Виртуальные средства"></span>
+              <span style="font-size:14px;color:var(--green-dk);font-weight:500;margin-left:6px" x-text="'+ '+fmt(acc.balanceVirtual)+' вирт.'" title="Доступный кредитный лимит (виртуальные средства)"></span>
             </template>
           </div>
           <div class="acc-sub" :class="acc.balanceReserved>0?'amber':''" x-text="acc.balanceReserved>0?'В резерве: '+fmt(acc.balanceReserved):'Резерв: 0,00 ₽'"></div>
+          <template x-if="(db.virtualAllocations||[]).filter(a=>a.accountId===acc.accountId&&a.status==='active').length>0">
+            <div class="acc-sub" style="color:var(--amber)">
+              Виртуальный долг: <b x-text="fmt((db.virtualAllocations||[]).filter(a=>a.accountId===acc.accountId&&a.status==='active').reduce((s,a)=>s+Math.max(0,a.originalAmount-a.repaidAmount),0))"></b>
+              · до <span x-text="fmtDt((db.virtualAllocations||[]).filter(a=>a.accountId===acc.accountId&&a.status==='active').sort((a,b)=>new Date(a.expiresAt)-new Date(b.expiresAt))[0]?.expiresAt||'')" style="font-size:10px"></span>
+            </div>
+          </template>
 
           <div class="btn-row">
             <template x-if="!acc.isBlocked&&(acc.subAccountTypeId==='01'||acc.subAccountTypeId==='02')">
@@ -451,7 +457,7 @@
     <div class="ptitle">Счета участников</div>
     <div class="panel-warn">Администратор ЭТП. Блокировка счёта приостанавливает все операции по нему.</div>
     <table class="admin-table">
-      <thead><tr><th>Пользователь</th><th>Счёт</th><th>Тип счёта</th><th>Свободно</th><th>В резерве</th><th>Виртуальные</th><th>Статус</th><th>Действия</th></tr></thead>
+      <thead><tr><th>Пользователь</th><th>Счёт</th><th>Тип счёта</th><th>Свободно</th><th>В резерве</th><th>Виртуальные / долг</th><th>Статус</th><th>Действия</th></tr></thead>
       <tbody>
         <template x-for="acc in adminAllAccounts" :key="acc.accountId">
           <tr>
@@ -460,7 +466,19 @@
             <td style="font-size:11px" x-text="acc.typeLabel"></td>
             <td :class="acc.balanceFree>0?'tx-plus':''" x-text="fmt(acc.balanceFree)"></td>
             <td :class="acc.balanceReserved>0?'tx-res':''" x-text="fmt(acc.balanceReserved)"></td>
-            <td x-text="acc.balanceVirtual>0?fmt(acc.balanceVirtual):'—'"></td>
+            <td>
+              <template x-if="(db.virtualAllocations||[]).filter(a=>a.accountId===acc.accountId&&a.status==='active').length===0">
+                <span style="color:var(--text3)">—</span>
+              </template>
+              <template x-for="alloc in (db.virtualAllocations||[]).filter(a=>a.accountId===acc.accountId&&a.status==='active')" :key="alloc.allocId">
+                <div style="font-size:10px;margin-bottom:3px;background:var(--amber-lt);padding:2px 6px;border-radius:4px">
+                  <span style="color:var(--amber);font-weight:600" x-text="fmt(alloc.originalAmount-alloc.repaidAmount)"></span>
+                  <span style="color:var(--text3)"> · до </span>
+                  <span style="color:var(--amber)" x-text="fmtDt(alloc.expiresAt)"></span>
+                  <button style="margin-left:4px;font-size:9px;border:none;background:none;color:var(--red);cursor:pointer;padding:0" @click="adminAnnulAlloc(alloc.allocId)" title="Аннулировать">✕</button>
+                </div>
+              </template>
+            </td>
             <td><span class="badge" :class="acc.isBlocked?'be':'bs'" x-text="acc.isBlocked?'Заблокирован':'Активен'"></span></td>
             <td style="display:flex;gap:5px;flex-wrap:wrap">
               <button class="btn btn-sm" :class="acc.isBlocked?'btn-green':'btn-red'" @click="adminToggleBlock(acc.accountId)"
@@ -829,7 +847,13 @@
           <div class="fg"><label class="fl">Сумма задатка, ₽ <span style="color:var(--red)">*</span></label>
             <input class="fi" type="number" x-model="appAmount" min="1">
             <div class="fh">Минимальная сумма: <b x-text="fmt(auctionById(appAuctionId)?.minDeposit||0)"></b></div></div>
-          <div style="font-size:12px;color:var(--text2);margin-bottom:4px">На задатковом счёте доступно: <b x-text="fmt(depositAccs[0]?.balanceFree||0)"></b></div>
+          <div style="font-size:12px;color:var(--text2);margin-bottom:4px">
+            На задатковом счёте доступно:
+            <b x-text="fmt((depositAccs[0]?.balanceFree||0)+(depositAccs[0]?.balanceVirtual||0))"></b>
+            <template x-if="depositAccs[0]?.balanceVirtual>0">
+              <span style="color:var(--green-dk);font-size:11px"> (вкл. <span x-text="fmt(depositAccs[0].balanceVirtual)"></span> вирт.)</span>
+            </template>
+          </div>
           <div class="err-msg" x-text="appError"></div>
         </div>
       </template>
@@ -926,6 +950,11 @@
         <input class="fi" type="number" x-model="admVirtualAmt" min="1"></div>
       <div class="fg"><label class="fl">Основание / комментарий</label>
         <input class="fi" type="text" x-model="admVirtualDesc" placeholder="Например: компенсация по заявке №..."></div>
+      <div class="fg">
+        <label class="fl">Срок действия <span style="font-size:10px;color:var(--text3)">(по умолчанию 30 дней)</span></label>
+        <input class="fi" type="date" x-model="admVirtualExpiry">
+        <div class="fh">По истечении срока средства аннулируются, задаток отзывается автоматически</div>
+      </div>
       <div class="err-msg" x-text="admVirtualError"></div>
     </div>
     <div class="mf">
