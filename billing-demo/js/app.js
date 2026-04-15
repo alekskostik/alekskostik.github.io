@@ -49,9 +49,7 @@ document.addEventListener('alpine:init', () => {
     },
     get pendingInvs() {
       const pending=['создано','на рассмотрении','в обработке'];
-      return this.allInvs
-        .filter(i=>pending.includes(i.status))
-        .filter(i=>this.sync1cFilter==='all'||this.sync1cAccountType(i)===this.sync1cFilter);
+      return this.allInvs.filter(i=>pending.includes(i.status));
     },
     get allTxs()       { return [...this.db.transactions].sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)); },
     get pendingCount() { return invsForUser(this.db,this.currentUserId).filter(i=>['создано','в обработке','на рассмотрении'].includes(i.status)).length; },
@@ -137,6 +135,17 @@ document.addEventListener('alpine:init', () => {
         return {...tx,userName:u?.name||'',userLabel:u?.label||'',accDisplay:acc?.displayNumber||tx.accountId};
       });
     },
+    // П.2: баланс задаткового р/с ЦДТ = подтверждённые пополнения задатковых - подтверждённые выводы
+    get cdtDepositBalance() {
+      const depAccIds=this.db.accounts.filter(a=>a.subAccountTypeId==='03'||a.subAccountTypeId==='04').map(a=>a.accountId);
+      const inflow=this.db.transactions
+        .filter(t=>depAccIds.includes(t.accountId)&&t.type==='пополнение'&&t.status==='завершена')
+        .reduce((s,t)=>s+t.amount,0);
+      const outflow=this.db.transactions
+        .filter(t=>depAccIds.includes(t.accountId)&&(t.type==='вывод'||t.type==='вывод задатка')&&t.status==='завершена')
+        .reduce((s,t)=>s+Math.abs(t.amount),0);
+      return Math.max(0,inflow-outflow);
+    },
 
     fmt, fmtDt,
     fmtDtFlex(d, withSec) {
@@ -154,6 +163,34 @@ document.addEventListener('alpine:init', () => {
       saveDB(this.db);
     },
     openActModal(invoiceId) { this.actInvoiceId=invoiceId; this.openModal('actView'); },
+    requestActTI(tiId) {
+      const ti=(this.db.tradeInvoices||[]).find(t=>t.tradeInvoiceId===tiId);
+      if(!ti) return;
+      ti.actStatus='запрошен'; ti.actRequestedAt=new Date().toISOString();
+      // создаём заявку в invoices чтобы она появилась в блоке 1С
+      const actRid=reqIdGen('A');
+      ti.actRequestId=actRid;
+      this.db.invoices.unshift({
+        invoiceId:genId('INV'),
+        accountId:this.db.accounts.find(a=>a.userId===ti.organizerId&&a.subAccountTypeId==='02')?.accountId||null,
+        type:'запрос акта за торги',
+        status:'создано',
+        amount:ti.amount||0,
+        requestId:actRid,
+        tradeInvoiceId:tiId,
+        createdAt:new Date().toISOString(),
+        description:'Запрос акта: '+ti.description
+      });
+      saveDB(this.db);
+    },
+    openActModalTI(tiId) {
+      // создаём временный объект совместимый с actView
+      const ti=(this.db.tradeInvoices||[]).find(t=>t.tradeInvoiceId===tiId);
+      if(!ti) return;
+      // кладём tradeInvoiceId в actInvoiceId как маркер
+      this.actInvoiceId='TI:'+tiId;
+      this.openModal('actView');
+    },
     // определяем тип счёта зачисления по заявке
     sync1cAccountType(inv) {
       const acc=this.db.accounts.find(a=>a.accountId===inv.accountId);
@@ -268,7 +305,7 @@ document.addEventListener('alpine:init', () => {
             ? 'Вывод задатка по торгам '+dep.auctionId+' (должник: '+(auc?.debtorName||'—')+')'
             : 'Вывод задатка на собственные реквизиты ОТ (торги '+dep.auctionId+')';
           this.db.invoices.unshift({invoiceId:genId('INV'),accountId:acc.accountId,type:'вывод задатка',status:'на рассмотрении',amount:remaining,requestId:this.wdDepRid,createdAt:now,description:restDesc});
-          this.db.transactions.unshift({txId:genId('TX'),accountId:acc.accountId,type:'вывод задатка',status:'в обработке',amount:-remaining,createdAt:now,description:restDesc});
+          this.db.transactions.unshift({txId:genId('TX'),accountId:acc.accountId,type:'вывод задатка',status:'в обработке',amount:-remaining,createdAt:now,description:restDesc,requestId:this.wdDepRid});
         }
         dep.status='выведен';
         saveDB(this.db); this.wdDepLoading=false; this.mStep=1;
@@ -417,7 +454,9 @@ document.addEventListener('alpine:init', () => {
         if(second){
           second.status='резерв снят';
           const dep=this.db.deposits.find(d=>d.depositId===second.depositId);
-          if(dep){ dep.holdUntilContract=false; this._releaseDeposit(dep,now); }
+          // задаток второго удерживается до releaseAfter (уже установлен при публикации протокола)
+          // НЕ снимаем сразу — снимет администратор или автоматически по таймауту
+          if(dep){ dep.holdUntilContract=false; }
         }
       } else {
         if(second){
@@ -432,12 +471,22 @@ document.addEventListener('alpine:init', () => {
         tradeInvoiceId:genId('TI'), auctionId:auc.auctionId,
         organizerId:auc.organizerId, status:'ожидает выставления',
         amount:null, createdAt:now, paidAt:null,
+        requestId:reqIdGen('I'),  // I = Invoice за торги
         description:'Счёт за проведение торгов № '+auc.auctionId
       });
       saveDB(this.db); this.closeModal();
     },
 
     // ── ОПЛАТА СЧЁТА ЗА ТОРГИ ──
+    // П.3: пометить счёт как оплаченный вне ЭТП
+    markTIPaidExternal(tiId) {
+      const ti=this.db.tradeInvoices?.find(t=>t.tradeInvoiceId===tiId);
+      if(!ti){return;}
+      if(!confirm('Пометить счёт как оплаченный вне ЭТП?'))return;
+      ti.status='оплачено вне ЭТП'; ti.paidAt=new Date().toISOString(); ti.paidExternal=true;
+      saveDB(this.db);
+    },
+
     payTradeInvoice(tiId) {
       const ti=this.db.tradeInvoices?.find(t=>t.tradeInvoiceId===tiId);
       if(!ti||!ti.amount){alert('Счёт не выставлен');return;}
@@ -579,17 +628,42 @@ document.addEventListener('alpine:init', () => {
           this.db.transactions.unshift({txId:genId('TX'),accountId:inv.accountId,type:'пополнение',status:'завершена',amount:inv.amount,createdAt:now,description:inv.description+' (подтверждено)',requestId:inv.requestId});
         }
       }
-      if(inv.type==='вывод'){const acc=this.db.accounts.find(a=>a.accountId===inv.accountId);if(acc)acc.balanceReserved=Math.max(0,acc.balanceReserved-inv.amount);}
-      if(inv.type==='вывод задатка'){const acc=this.db.accounts.find(a=>a.accountId===inv.accountId);if(acc)acc.balanceReserved=Math.max(0,acc.balanceReserved-inv.amount);}
+      if(inv.type==='вывод'||inv.type==='вывод задатка'){
+        const acc=this.db.accounts.find(a=>a.accountId===inv.accountId);
+        if(acc) acc.balanceReserved=Math.max(0,acc.balanceReserved-inv.amount);
+        // обновляем статус транзакции вывода на "завершена"
+        const wdTx=this.db.transactions.find(t=>t.requestId===inv.requestId&&(t.type==='вывод'||t.type==='вывод задатка'));
+        if(wdTx){ wdTx.status='завершена'; wdTx.completedAt=now; }
+      }
       if(inv.type==='перевод задаткового на услуги'){const from=this.db.accounts.find(a=>a.accountId===inv.accountId);const to=this.db.accounts.find(a=>a.userId===from?.userId&&a.subAccountTypeId==='02');if(from&&to){from.balanceReserved=Math.max(0,from.balanceReserved-inv.amount);to.balanceFree+=inv.amount;}}
       // акт выполненных работ — если запрошен, помечаем как готов
       if(inv.actStatus==='запрошен'){ inv.actStatus='готов'; inv.actIssuedAt=now; }
+      // запрос акта за торги
+      if(inv.type==='запрос акта за торги'&&inv.tradeInvoiceId){
+        const ti=(this.db.tradeInvoices||[]).find(t=>t.tradeInvoiceId===inv.tradeInvoiceId);
+        if(ti){ ti.actStatus='готов'; ti.actIssuedAt=now; }
+      }
       saveDB(this.db);
     },
+    // выставление счёта за торги через 1С
+    confirmTI(tiId, amount) {
+      const ti=(this.db.tradeInvoices||[]).find(t=>t.tradeInvoiceId===tiId);
+      if(!ti) return;
+      const amt=parseFloat(amount);
+      if(!amt||amt<=0){alert('Укажите сумму');return;}
+      ti.amount=amt; ti.status='выставлен'; ti.issuedAt=new Date().toISOString();
+      saveDB(this.db);
+    },
+
     reject1C(invoiceId) {
       const inv=this.db.invoices.find(i=>i.invoiceId===invoiceId); if(!inv) return;
       const now=new Date().toISOString(); inv.status='отклонено'; inv.completedAt=now;
-      if(inv.type==='вывод'||inv.type==='перевод задаткового на услуги'){const acc=this.db.accounts.find(a=>a.accountId===inv.accountId);if(acc){acc.balanceReserved=Math.max(0,acc.balanceReserved-inv.amount);acc.balanceFree+=inv.amount;}}
+      if(inv.type==='вывод'||inv.type==='вывод задатка'||inv.type==='перевод задаткового на услуги'){
+        const acc=this.db.accounts.find(a=>a.accountId===inv.accountId);
+        if(acc){acc.balanceReserved=Math.max(0,acc.balanceReserved-inv.amount);acc.balanceFree+=inv.amount;}
+        const wdTx=this.db.transactions.find(t=>t.requestId===inv.requestId);
+        if(wdTx){ wdTx.status='отменена'; wdTx.completedAt=now; }
+      }
       saveDB(this.db);
     },
   }));
