@@ -1,7 +1,7 @@
 document.addEventListener('alpine:init', () => {
   Alpine.data('billing', () => ({
 
-    db: loadDB(), page:'wallet', theme:loadTheme(),
+    db: loadDB(), page:'wallet', theme:loadTheme(), showSeconds:false,
     modal:null, mStep:0,
 
     fsAccId:null, fsAmount:'', fsError:'', fsLoading:false, fsRid:'',
@@ -15,7 +15,9 @@ document.addEventListener('alpine:init', () => {
     finishAuctionId:null,
     contractAuctionId:null, contractWith:null,
     admVirtualAccId:null, admVirtualAmt:'', admVirtualDesc:'', admVirtualExpiry:'', admVirtualError:'',
+    sync1cFilter:'all',
     prcName:'', prcInn:'', prcKpp:'', prcBank:'', prcBik:'', prcAccNum:'', prcError:'', prcLoading:false,
+    actInvoiceId:null,
 
     CDT_NAME:'АО «Центр дистанционных торгов»', CDT_INN_KPP:'7812345678 / 780101001',
     CDT_BANK:'АО «Тинькофф Банк»', CDT_BIK:'044525974', CDT_RS:'40702810000001234567',
@@ -42,6 +44,15 @@ document.addEventListener('alpine:init', () => {
     get invs()         { return invsForUser(this.db,this.currentUserId); },
     get reqs()         { return reqsForUser(this.db,this.currentUserId); },
     get allInvs()      { return [...this.db.invoices].sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)); },
+    get actsRequested() {
+      return this.allInvs.filter(i=>i.actStatus==='запрошен');
+    },
+    get pendingInvs() {
+      const pending=['создано','на рассмотрении','в обработке'];
+      return this.allInvs
+        .filter(i=>pending.includes(i.status))
+        .filter(i=>this.sync1cFilter==='all'||this.sync1cAccountType(i)===this.sync1cFilter);
+    },
     get allTxs()       { return [...this.db.transactions].sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)); },
     get pendingCount() { return invsForUser(this.db,this.currentUserId).filter(i=>['создано','в обработке','на рассмотрении'].includes(i.status)).length; },
     get totalBalance() { return this.accs.reduce((s,a)=>s+a.balanceFree+a.balanceReserved+a.balanceVirtual,0); },
@@ -128,6 +139,34 @@ document.addEventListener('alpine:init', () => {
     },
 
     fmt, fmtDt,
+    fmtDtFlex(d, withSec) {
+      const dt=new Date(d);
+      const date=dt.toLocaleDateString('ru-RU');
+      const time=withSec
+        ? dt.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit',second:'2-digit'})
+        : dt.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+      return date+' '+time;
+    },
+    requestAct(invoiceId) {
+      const inv=this.db.invoices.find(i=>i.invoiceId===invoiceId);
+      if(!inv) return;
+      inv.actStatus='запрошен'; inv.actRequestedAt=new Date().toISOString();
+      saveDB(this.db);
+    },
+    openActModal(invoiceId) { this.actInvoiceId=invoiceId; this.openModal('actView'); },
+    // определяем тип счёта зачисления по заявке
+    sync1cAccountType(inv) {
+      const acc=this.db.accounts.find(a=>a.accountId===inv.accountId);
+      if(!acc) return 'all';
+      if(acc.subAccountTypeId==='01') return 'ut_svc';
+      if(acc.subAccountTypeId==='02') return 'ot_svc';
+      if(acc.subAccountTypeId==='03'||acc.subAccountTypeId==='04') return 'deposit';
+      return 'all';
+    },
+    sync1cAccountLabel(inv) {
+      const t=this.sync1cAccountType(inv);
+      return {'ut_svc':'Счёт для услуг УТ','ot_svc':'Счёт для услуг ОТ','deposit':'Счёт задатков ЦДТ'}[t]||'—';
+    },
     accForId(id)    { return this.db.accounts.find(a=>a.accountId===id); },
     userByAccId(id) { const acc=this.db.accounts.find(a=>a.accountId===id); return USERS.find(u=>u.userId===acc?.userId); },
     badgeClass(s)   { return ({'исполнено':'bs','завершена':'bs','на рассмотрении':'bp','создано':'bc','отклонено':'be','в обработке':'bc','зарезервирован':'bc','переведён':'bs','снят резерв':'bs','выведен':'bs','удерживается':'bp','отменён':'be','принята':'bs','победитель':'bs','второй участник':'bp','резерв снят':'bs','победитель (договор)':'bs','Приём заявок':'bs','Протокол опубликован':'bp','Договор подписан':'bs','Приостановлены':'be','Заблокирован':'be','Активен':'bs'})[s]||'bc'; },
@@ -177,7 +216,7 @@ document.addEventListener('alpine:init', () => {
         this.wdRid=reqIdGen('W');
         const desc=acc.subAccountTypeId==='03'?'Вывод средств с задаткового счёта':'Вывод д/с на реквизиты';
         this.db.invoices.unshift({invoiceId:genId('INV'),accountId:this.wdAccId,type:'вывод',status:'на рассмотрении',amount:amt,requestId:this.wdRid,createdAt:new Date().toISOString(),description:desc});
-        this.db.transactions.unshift({txId:genId('TX'),accountId:this.wdAccId,type:'вывод',status:'в обработке',amount:-amt,createdAt:new Date().toISOString(),description:desc+' ('+this.wdRid+')'});
+        this.db.transactions.unshift({txId:genId('TX'),accountId:this.wdAccId,type:'вывод',status:'в обработке',amount:-amt,createdAt:new Date().toISOString(),description:desc,requestId:this.wdRid});
         saveDB(this.db); this.wdLoading=false; this.mStep=1;
       },500);
     },
@@ -253,7 +292,7 @@ document.addEventListener('alpine:init', () => {
         const rid=reqIdGen('S');
         this.db.invoices.unshift({invoiceId:genId('INV'),accountId:acc.accountId,type:'оплата услуги',status:'исполнено',amount:svc.price,requestId:rid,createdAt:new Date().toISOString(),description:'Услуга: '+svc.name});
         // фиксируем virtualPart в транзакции — нужно для расчёта долга
-        this.db.transactions.unshift({txId:genId('TX'),accountId:acc.accountId,type:'оплата услуги',status:'завершена',amount:-svc.price,virtualPart:fromVirt,repaid:false,createdAt:new Date().toISOString(),description:'Услуга: '+svc.name});
+        this.db.transactions.unshift({txId:genId('TX'),accountId:acc.accountId,type:'оплата услуги',status:'завершена',amount:-svc.price,virtualPart:fromVirt,repaid:false,createdAt:new Date().toISOString(),description:'Услуга: '+svc.name,requestId:rid});
         saveDB(this.db); this.mStep=1;
       },400);
     },
@@ -537,12 +576,14 @@ document.addEventListener('alpine:init', () => {
             // balanceVirtual уже был уменьшен при расходовании, здесь не меняем
             this.db.transactions.unshift({txId:genId('TX'),accountId:inv.accountId,type:'погашение виртуальных д/с',status:'завершена',amount:-toRepay,createdAt:now,description:'Погашение виртуальных д/с ('+fmt(toRepay)+')'});
           }
-          this.db.transactions.unshift({txId:genId('TX'),accountId:inv.accountId,type:'пополнение',status:'завершена',amount:inv.amount,createdAt:now,description:inv.description+' (подтверждено)'});
+          this.db.transactions.unshift({txId:genId('TX'),accountId:inv.accountId,type:'пополнение',status:'завершена',amount:inv.amount,createdAt:now,description:inv.description+' (подтверждено)',requestId:inv.requestId});
         }
       }
       if(inv.type==='вывод'){const acc=this.db.accounts.find(a=>a.accountId===inv.accountId);if(acc)acc.balanceReserved=Math.max(0,acc.balanceReserved-inv.amount);}
       if(inv.type==='вывод задатка'){const acc=this.db.accounts.find(a=>a.accountId===inv.accountId);if(acc)acc.balanceReserved=Math.max(0,acc.balanceReserved-inv.amount);}
       if(inv.type==='перевод задаткового на услуги'){const from=this.db.accounts.find(a=>a.accountId===inv.accountId);const to=this.db.accounts.find(a=>a.userId===from?.userId&&a.subAccountTypeId==='02');if(from&&to){from.balanceReserved=Math.max(0,from.balanceReserved-inv.amount);to.balanceFree+=inv.amount;}}
+      // акт выполненных работ — если запрошен, помечаем как готов
+      if(inv.actStatus==='запрошен'){ inv.actStatus='готов'; inv.actIssuedAt=now; }
       saveDB(this.db);
     },
     reject1C(invoiceId) {

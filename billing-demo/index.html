@@ -70,6 +70,9 @@
     <button class="btn btn-sm" @click="setPage('sync1c')" :style="page==='sync1c'?'background:var(--amber-lt);border-color:var(--amber);color:var(--amber)':''">⚙ Обработка 1С</button>
     <button class="btn btn-sm btn-green" @click="loadDemo()">↓ Демо-данные</button>
     <button class="btn btn-sm btn-red"   @click="clearData()">✕ Сброс данных</button>
+    <button class="btn btn-sm" @click="showSeconds=!showSeconds"
+      :style="showSeconds?'background:var(--blue-lt);border-color:var(--blue);color:var(--blue)':''"
+      title="Показывать секунды в датах">⏱</button>
     <div class="theme-sw">
       <button class="tsw-btn" :class="{active:theme==='light'}"  @click="setTheme('light')"  title="Светлая">☀</button>
       <button class="tsw-btn" :class="{active:theme==='dark'}"   @click="setTheme('dark')"   title="Тёмная">☾</button>
@@ -189,7 +192,7 @@
         <template x-if="txs.length===0"><tr><td colspan="5" class="empty">Операций пока нет</td></tr></template>
         <template x-for="tx in txs" :key="tx.txId">
           <tr>
-            <td style="font-size:11px;color:var(--text2);white-space:nowrap" x-text="fmtDt(tx.createdAt)"></td>
+            <td style="font-size:11px;color:var(--text2);white-space:nowrap" x-text="fmtDtFlex(tx.createdAt,showSeconds)"></td>
             <td x-text="tx.description||tx.type"></td>
             <td style="font-size:11px;color:var(--text2)" x-text="accForId(tx.accountId)?.label||''"></td>
             <td :class="txClass(tx)" x-text="(tx.amount>0?'+':'')+fmt(tx.amount)"></td>
@@ -217,6 +220,20 @@
             <span class="badge" :class="badgeClass(inv.status)" x-text="inv.status"></span>
           </div>
         </div>
+        <!-- Кнопка запроса акта для оплаченных услуг -->
+        <template x-if="inv.type==='оплата услуги'&&inv.status==='исполнено'">
+          <div style="margin-top:8px;display:flex;align-items:center;gap:8px">
+            <template x-if="!inv.actStatus">
+              <button class="btn btn-sm" @click="requestAct(inv.invoiceId)">📄 Запросить акт</button>
+            </template>
+            <template x-if="inv.actStatus==='запрошен'">
+              <span class="badge bc">Акт запрошен · ожидает формирования</span>
+            </template>
+            <template x-if="inv.actStatus==='готов'">
+              <button class="btn btn-sm btn-green" @click="openActModal(inv.invoiceId)">📄 Акт выполненных работ</button>
+            </template>
+          </div>
+        </template>
       </div>
     </template>
     <!-- Счета за торги для ОТ -->
@@ -255,7 +272,7 @@
       <div class="ibox">Средства резервируются при подаче заявки на торги. Резерв снимается в течение 24 часов после публикации протокола, если ваша заявка не является заявкой победителя.</div>
     </template>
     <template x-if="currentRole==='ot'">
-      <div class="ibox">Задатки участников торгов. После публикации протокола задаток победителя переводится на задатковый счёт и может быть выведен на реквизиты должника (указан в заявке на торги).</div>
+      <div class="ibox">Задатки участников торгов. После публикации протокола задаток победителя переводится на задатковый счёт. Доступны варианты использования: вывод на реквизиты должника, вывод на собственные реквизиты ОТ, либо зачёт в счёт оплаты услуг ЭТП с выводом остатка.</div>
     </template>
     <template x-if="myDeposits.length===0"><div class="empty">Задатков нет</div></template>
     <template x-for="dep in myDeposits" :key="dep.depositId">
@@ -450,19 +467,46 @@
   <section class="pg" :class="{active:page==='sync1c'}">
     <div class="ptitle">Обработка заявок 1С</div>
     <div class="panel-warn">⚠ <strong>Тестовый инструмент</strong> — не является частью личного кабинета. Имитирует ответ учётной системы 1С.</div>
+
+    <!-- Балансы расчётных счетов ЦДТ -->
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 16px;min-width:180px">
+        <div style="font-size:10px;color:var(--text3);margin-bottom:2px">Счёт для услуг УТ</div>
+        <div style="font-size:13px;font-weight:600;color:var(--blue)" x-text="fmt(db.accounts.filter(a=>a.subAccountTypeId==='01').reduce((s,a)=>s+a.balanceFree,0))"></div>
+        <div style="font-size:10px;color:var(--text3)">р/с для зачисления УТ</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 16px;min-width:180px">
+        <div style="font-size:10px;color:var(--text3);margin-bottom:2px">Счёт для услуг ОТ</div>
+        <div style="font-size:13px;font-weight:600;color:var(--blue)" x-text="fmt(db.accounts.filter(a=>a.subAccountTypeId==='02').reduce((s,a)=>s+a.balanceFree,0))"></div>
+        <div style="font-size:10px;color:var(--text3)">р/с для зачисления ОТ</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 16px;min-width:180px">
+        <div style="font-size:10px;color:var(--text3);margin-bottom:2px">Счёт для задатков</div>
+        <div style="font-size:13px;font-weight:600;color:var(--blue)" x-text="fmt(db.accounts.filter(a=>a.subAccountTypeId==='03'||a.subAccountTypeId==='04').reduce((s,a)=>s+a.balanceFree+a.balanceReserved,0))"></div>
+        <div style="font-size:10px;color:var(--text3)">р/с задатковый ЦДТ</div>
+      </div>
+    </div>
+
     <div class="stitle">Ожидают обработки</div>
-    <template x-if="allInvs.filter(i=>['создано','на рассмотрении','в обработке'].includes(i.status)).length===0">
+    <template x-if="pendingInvs.length===0">
       <div class="empty">Нет заявок, ожидающих обработки</div>
     </template>
-    <template x-for="inv in allInvs.filter(i=>['создано','на рассмотрении','в обработке'].includes(i.status))" :key="inv.invoiceId">
+    <template x-for="inv in pendingInvs" :key="inv.invoiceId">
       <div class="inv-1c-item">
         <div class="inv-1c-row">
           <div style="flex:1;min-width:0">
             <div style="font-size:12px;font-weight:600;margin-bottom:1px" x-text="inv.description||inv.type"></div>
             <div style="font-size:10px;color:var(--text2)" x-text="fmtDt(inv.createdAt)+' · '+(accForId(inv.accountId)?.displayNumber||'')+(userByAccId(inv.accountId)?' ('+userByAccId(inv.accountId).label+')':'')"></div>
-            <div style="font-size:10px;color:var(--text3);font-family:var(--mono)" x-text="inv.requestId"></div>
+            <div style="font-size:10px;color:var(--text3);font-family:var(--mono)" x-text="'№ ЭТП: '+inv.requestId"></div>
           </div>
-          <div style="text-align:right;margin:0 12px;flex-shrink:0">
+          <!-- Счёт зачисления -->
+          <div style="margin:0 10px;flex-shrink:0;text-align:center">
+            <div style="font-size:9px;color:var(--text3);margin-bottom:2px">Счёт зачисления</div>
+            <span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:6px"
+              :style="sync1cAccountType(inv)==='ut_svc'?'background:#E6F1FB;color:#0C447C':sync1cAccountType(inv)==='ot_svc'?'background:#EAF3DE;color:#085041':'background:#FFF3CD;color:#856404'"
+              x-text="sync1cAccountLabel(inv)"></span>
+          </div>
+          <div style="text-align:right;margin:0 8px;flex-shrink:0">
             <div style="font-size:13px;font-weight:700" :class="inv.type==='пополнение'?'tx-plus':'tx-minus'" x-text="(inv.type==='пополнение'?'+':'−')+fmt(inv.amount)"></div>
             <span class="badge" :class="badgeClass(inv.status)" x-text="inv.status"></span>
           </div>
@@ -504,28 +548,59 @@
       </div>
     </template>
 
+    <!-- Запросы актов выполненных работ -->
+    <template x-if="actsRequested.length>0">
+      <div style="margin-bottom:16px">
+        <div class="stitle" style="margin-bottom:8px">Запросы актов выполненных работ</div>
+        <template x-for="inv in actsRequested" :key="'act-'+inv.invoiceId">
+          <div class="inv-1c-item">
+            <div class="inv-1c-row">
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12px;font-weight:600;margin-bottom:1px" x-text="inv.description"></div>
+                <div style="font-size:10px;color:var(--text2)" x-text="fmtDtFlex(inv.actRequestedAt,showSeconds)+' · '+(userByAccId(inv.accountId)?.label||'')+' · '+fmt(inv.amount)"></div>
+                <div style="font-size:10px;color:var(--text3);font-family:var(--mono)" x-text="'№ ЭТП: '+inv.requestId"></div>
+              </div>
+              <button class="btn-confirm" @click="confirm1C(inv.invoiceId)">✓ Акт сформирован</button>
+            </div>
+          </div>
+        </template>
+      </div>
+    </template>
+
     <div class="done-list">
-      <div class="stitle" style="margin-bottom:8px">Обработанные</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+        <div class="stitle" style="margin:0">Обработанные</div>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <span style="font-size:10px;color:var(--text3)">Счёт:</span>
+          <template x-for="f in [{id:'all',label:'Все'},{id:'ut_svc',label:'Услуги УТ'},{id:'ot_svc',label:'Услуги ОТ'},{id:'deposit',label:'Задатки'}]" :key="f.id">
+            <button class="btn btn-sm" style="padding:2px 8px;font-size:10px" :class="sync1cFilter===f.id?'btn-p':''"
+              @click="sync1cFilter=f.id" x-text="f.label"></button>
+          </template>
+        </div>
+      </div>
       <!-- Выставленные и оплаченные счета за торги -->
       <template x-for="ti in (db.tradeInvoices||[]).filter(t=>t.status==='оплачен')" :key="'ti-'+ti.tradeInvoiceId">
         <div class="done-row">
           <span x-text="ti.description+' · '+bidderName(ti.organizerId)"></span>
           <span style="display:flex;gap:8px;align-items:center">
-            <span style="font-size:10px;color:var(--text3)" x-text="ti.paidAt?fmtDt(ti.paidAt):fmtDt(ti.createdAt)"></span>
+            <span style="font-size:10px;color:var(--text3)" x-text="ti.paidAt?fmtDtFlex(ti.paidAt,showSeconds):fmtDtFlex(ti.createdAt,showSeconds)"></span>
             <span x-text="ti.amount?fmt(ti.amount):'—'"></span>
             <span class="badge" :class="ti.status==='оплачен'?'bs':'bp'" x-text="ti.status"></span>
           </span>
         </div>
       </template>
 
-      <template x-if="allInvs.filter(i=>!['создано','на рассмотрении','в обработке'].includes(i.status)).length===0">
+      <template x-if="allInvs.filter(i=>!['создано','на рассмотрении','в обработке'].includes(i.status)&&(sync1cFilter==='all'||sync1cAccountType(i)===sync1cFilter)).length===0">
         <div style="font-size:12px;color:var(--text3);padding:8px 0">Нет</div>
       </template>
-      <template x-for="inv in allInvs.filter(i=>!['создано','на рассмотрении','в обработке'].includes(i.status))" :key="'d-'+inv.invoiceId">
+      <template x-for="inv in allInvs.filter(i=>!['создано','на рассмотрении','в обработке'].includes(i.status)&&(sync1cFilter==='all'||sync1cAccountType(i)===sync1cFilter))" :key="'d-'+inv.invoiceId">
         <div class="done-row">
-          <span x-text="(inv.description||inv.type)+' · '+(accForId(inv.accountId)?.displayNumber||'')"></span>
+          <div>
+            <span x-text="(inv.description||inv.type)+' · '+(accForId(inv.accountId)?.displayNumber||'')"></span>
+            <span style="font-size:10px;color:var(--text3);font-family:var(--mono);margin-left:6px" x-text="inv.requestId"></span>
+          </div>
           <span style="display:flex;gap:8px;align-items:center">
-            <span style="font-size:10px;color:var(--text3)" x-text="inv.completedAt?fmtDt(inv.completedAt):''"></span>
+            <span style="font-size:10px;color:var(--text3)" x-text="inv.completedAt?fmtDtFlex(inv.completedAt,showSeconds):''"></span>
             <span x-text="fmt(inv.amount)"></span>
             <span class="badge" :class="badgeClass(inv.status)" x-text="inv.status"></span>
           </span>
@@ -681,18 +756,19 @@
   </section>
 
   <!-- ADMIN: Движение средств -->
-  <section class="pg" :class="{active:page==='adminTxs'&&isAdmin}">
+  <section class="pg" :class="{active:page==='adminTxs'&&isAdmin}" style="overflow-x:auto">
     <div class="ptitle">Движение средств — все участники</div>
-    <table class="admin-table">
-      <thead><tr><th>Дата / время</th><th>Участник</th><th>Счёт</th><th>Операция</th><th>Сумма</th><th>Статус</th></tr></thead>
+    <table class="admin-table" style="min-width:900px">
+      <thead><tr><th style="white-space:nowrap">Дата / время</th><th style="white-space:nowrap;min-width:140px">Участник</th><th style="white-space:nowrap;min-width:130px">Счёт</th><th style="min-width:160px">Операция</th><th style="white-space:nowrap">№ ЭТП</th><th style="white-space:nowrap">Сумма</th><th style="white-space:nowrap">Статус</th></tr></thead>
       <tbody>
         <template x-if="adminAllTxs.length===0"><tr><td colspan="6" class="empty">Операций пока нет</td></tr></template>
         <template x-for="tx in adminAllTxs" :key="tx.txId">
           <tr>
             <td style="font-size:11px;color:var(--text2);white-space:nowrap" x-text="fmtDt(tx.createdAt)"></td>
-            <td style="font-size:11px" x-text="tx.userName+' ('+tx.userLabel+')'"></td>
-            <td style="font-size:10px;font-family:var(--mono)" x-text="tx.accDisplay"></td>
+            <td style="font-size:11px;white-space:nowrap" x-text="tx.userName+' ('+tx.userLabel+')'"></td>
+            <td style="font-size:10px;font-family:var(--mono);white-space:nowrap" x-text="tx.accDisplay"></td>
             <td style="font-size:11px" x-text="tx.description||tx.type"></td>
+            <td style="font-size:10px;color:var(--text3);font-family:var(--mono)" x-text="tx.requestId||'—'"></td>
             <td :class="txClass(tx)" x-text="(tx.amount>0?'+':'')+fmt(tx.amount)"></td>
             <td><span class="badge" :class="badgeClass(tx.status)" x-text="tx.status"></span></td>
           </tr>
@@ -1187,6 +1263,49 @@
         <span x-show="prcLoading" class="spinner"></span>
         <span x-text="prcLoading?'Сохраняем...':'Добавить принципала'"></span>
       </button>
+    </div>
+  </div>
+</div>
+
+<!-- АКТ ВЫПОЛНЕННЫХ РАБОТ -->
+<div class="modal-overlay" :class="{open:modal==='actView'}" @click.self="closeModal()">
+  <div class="modal" style="max-width:560px">
+    <div class="mh"><span class="mt">Акт выполненных работ</span><button class="mc" @click="closeModal()">×</button></div>
+    <div class="mb" x-show="actInvoiceId">
+      <template x-if="db.invoices.find(i=>i.invoiceId===actInvoiceId)">
+        <div style="font-family:var(--mono);font-size:11px;line-height:1.8;background:var(--bg3);padding:16px;border-radius:var(--radius)">
+          <div style="text-align:center;font-weight:700;font-size:13px;margin-bottom:12px">АКТ ВЫПОЛНЕННЫХ РАБОТ</div>
+          <div>№ <span x-text="db.invoices.find(i=>i.invoiceId===actInvoiceId)?.requestId"></span></div>
+          <div>Дата: <span x-text="db.invoices.find(i=>i.invoiceId===actInvoiceId)?.actIssuedAt?fmtDt(db.invoices.find(i=>i.invoiceId===actInvoiceId).actIssuedAt):fmtDt(new Date().toISOString())"></span></div>
+          <div style="margin:10px 0;border-top:1px solid var(--border);padding-top:10px">
+            <div>Исполнитель: АО «Центр дистанционных торгов»</div>
+            <div>ИНН/КПП: 7812345678 / 780101001</div>
+          </div>
+          <div style="border-top:1px solid var(--border);padding-top:10px">
+            <div>Заказчик: <span x-text="currentUser?.name||'—'"></span></div>
+          </div>
+          <div style="margin:10px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:8px 0">
+            <div style="display:flex;justify-content:space-between;font-weight:600">
+              <span>Наименование услуги</span><span>Сумма</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-top:4px">
+              <span x-text="db.invoices.find(i=>i.invoiceId===actInvoiceId)?.description||'Услуга ЭТП'"></span>
+              <span x-text="fmt(db.invoices.find(i=>i.invoiceId===actInvoiceId)?.amount||0)"></span>
+            </div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-weight:700">
+            <span>Итого:</span>
+            <span x-text="fmt(db.invoices.find(i=>i.invoiceId===actInvoiceId)?.amount||0)"></span>
+          </div>
+          <div style="margin-top:12px;font-size:10px;color:var(--text3)">
+            Услуги оказаны в полном объёме. Претензий нет.
+          </div>
+        </div>
+      </template>
+    </div>
+    <div class="mf">
+      <button class="btn" @click="closeModal()">Закрыть</button>
+      <button class="btn btn-p" @click="window.print()">🖨 Печать</button>
     </div>
   </div>
 </div>
