@@ -1,4 +1,4 @@
-const STORE_KEY = 'cdt_billing_v24';
+const STORE_KEY = 'cdt_billing_v25';
 
 const USERS = [
   { userId:'USR-UT1', name:'Иванов Константин', initials:'КИ', role:'ut', label:'УТ 1' },
@@ -48,7 +48,7 @@ const ACC_TYPE_LABEL = {
 
 function buildSeed() {
   return {
-    _v: 24,
+    _v: 25,
     currentUserId: 'USR-UT1',
     auctions: buildAuctions(),
     accounts: [
@@ -63,7 +63,7 @@ function buildSeed() {
     deposits: [],
     tradeApplications: [],
     principals: buildPrincipals(),
-    tradeInvoices: [],
+    docRequests: [],  // { docRequestId, type:'act', refType:'invoice', refId, status:'pending'|'ready', requestedAt, issuedAt, description }
     // virtualAllocations: { allocId, accountId, originalAmount, repaidAmount, status(active/repaid/cancelled), expiresAt, createdAt, description }
     // долг = sum(originalAmount) по всем active записям; погашается реальными платежами FIFO
     virtualAllocations: [],
@@ -98,14 +98,14 @@ function clearAllData(db) {
   db.transactions=[]; db.invoices=[]; db.deposits=[]; db.tradeApplications=[];
   db.auctions = buildAuctions();
   db.principals = buildPrincipals();
-  db.tradeInvoices = [];
+  db.docRequests = [];
   db.virtualAllocations = [];
   db.accounts.forEach(a=>{ a.balanceFree=0; a.balanceReserved=0; a.balanceVirtual=0; a.isBlocked=false; });
   saveDB(db);
 }
 
 function loadDB() {
-  try { const raw=localStorage.getItem(STORE_KEY); if(raw){const p=JSON.parse(raw);if(p._v===24)return p;} } catch(e){}
+  try { const raw=localStorage.getItem(STORE_KEY); if(raw){const p=JSON.parse(raw);if(p._v===25)return p;} } catch(e){}
   const db=buildSeed(); saveDB(db); return db;
 }
 function saveDB(db)  { try{localStorage.setItem(STORE_KEY,JSON.stringify(db));}catch(e){} }

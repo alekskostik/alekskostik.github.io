@@ -99,7 +99,8 @@
         <div class="ni" :class="{active:page==='wallet'}"     @click="setPage('wallet')"><span class="ni-ico">◈</span> Финансы</div>
         <div class="ni" :class="{active:page==='invoices'}"   @click="setPage('invoices')">
           <span class="ni-ico">📋</span> Заявки и счета
-          <span class="ni-badge" x-show="pendingCount+(db.tradeInvoices||[]).filter(t=>t.organizerId===currentUserId&&t.status==='выставлен').length>0" x-text="pendingCount+(db.tradeInvoices||[]).filter(t=>t.organizerId===currentUserId&&t.status==='выставлен').length"></span>
+          <span class="ni-badge" x-show="pendingCount+db.invoices.filter(i=>i.type==='trade_invoice'&&i.accountId&&db.accounts.find(a=>a.accountId===i.accountId)?.userId===currentUserId&&i.status==='выставлен').length>0"
+              x-text="pendingCount+db.invoices.filter(i=>i.type==='trade_invoice'&&i.accountId&&db.accounts.find(a=>a.accountId===i.accountId)?.userId===currentUserId&&i.status==='выставлен').length"></span>
         </div>
         <div class="ni" :class="{active:page==='deposits'}"   @click="setPage('deposits')"><span class="ni-ico">◉</span> Задатки</div>
         <div class="ni" :class="{active:page==='trades'}"     @click="setPage('trades')"><span class="ni-ico">⚖</span> <span x-text="currentRole==='ut'?'Торги':'Мои торги'"></span></div>
@@ -148,7 +149,21 @@
               </span>
             </template>
           </div>
-          <div class="acc-sub" :class="acc.balanceReserved>0?'amber':''" x-text="acc.balanceReserved>0?'В резерве: '+fmt(acc.balanceReserved):'Резерв: 0,00 ₽'"></div>
+          <template x-if="acc.subAccountTypeId==='03'||acc.subAccountTypeId==='04'">
+            <div class="acc-sub" :class="acc.balanceReserved>0?'amber':''" x-text="acc.balanceReserved>0?'В резерве: '+fmt(acc.balanceReserved):'Резерв: 0,00 ₽'"></div>
+          </template>
+          <template x-if="acc.subAccountTypeId==='01'||acc.subAccountTypeId==='02'">
+            <div class="acc-sub" :class="db.invoices.filter(i=>i.accountId===acc.accountId&&(i.type==='trade_invoice'||i.type==='service_invoice')&&i.status==='выставлен'&&i.amount).reduce((s,i)=>s+i.amount,0)>0?'amber':''">
+              <template x-if="db.invoices.filter(i=>i.accountId===acc.accountId&&(i.type==='trade_invoice'||i.type==='service_invoice')&&i.status==='выставлен'&&i.amount).length>0">
+                <span>К оплате: <b x-text="fmt(db.invoices.filter(i=>i.accountId===acc.accountId&&(i.type==='trade_invoice'||i.type==='service_invoice')&&i.status==='выставлен'&&i.amount).reduce((s,i)=>s+i.amount,0))"></b>
+                  <span style="font-size:10px" x-text="' ('+db.invoices.filter(i=>i.accountId===acc.accountId&&(i.type==='trade_invoice'||i.type==='service_invoice')&&i.status==='выставлен'&&i.amount).length+' сч.)'"></span>
+                </span>
+              </template>
+              <template x-if="!db.invoices.filter(i=>i.accountId===acc.accountId&&(i.type==='trade_invoice'||i.type==='service_invoice')&&i.status==='выставлен'&&i.amount).length">
+                <span style="color:var(--text3)">Счетов к оплате нет</span>
+              </template>
+            </div>
+          </template>
           <template x-if="_virtDebtForAcc(acc.accountId)>0">
             <div class="acc-sub" style="color:var(--amber)">
               Виртуальный долг: <b x-text="fmt(_virtDebtForAcc(acc.accountId))"></b>
@@ -213,67 +228,56 @@
     <template x-for="inv in invs" :key="inv.invoiceId">
       <div class="inv-item">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
-          <div>
-            <div style="font-size:13px;font-weight:600;margin-bottom:2px" x-text="inv.description||inv.type"></div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:600;margin-bottom:2px">
+              <span x-text="inv.description||inv.type"></span>
+              <span x-show="inv.type==='trade_invoice'" class="badge bc" style="margin-left:6px;font-size:10px;vertical-align:middle">Счёт за торги</span>
+            </div>
             <div style="font-size:11px;color:var(--text2)" x-text="fmtDt(inv.createdAt)+' · '+(accForId(inv.accountId)?.displayNumber||'')"></div>
             <div style="font-size:10px;color:var(--text3);font-family:var(--mono);margin-top:2px" x-text="inv.requestId"></div>
           </div>
           <div style="text-align:right;flex-shrink:0">
-            <div style="font-size:14px;font-weight:700;margin-bottom:3px" :class="inv.type==='пополнение'?'tx-plus':'tx-minus'" x-text="(inv.type==='пополнение'?'+':'−')+fmt(inv.amount)"></div>
+            <div style="font-size:14px;font-weight:700;margin-bottom:3px"
+              :class="inv.amount!=null?(inv.type==='пополнение'?'tx-plus':'tx-minus'):''"
+              x-text="inv.amount!=null?(inv.type==='пополнение'?'+':'−')+fmt(inv.amount):'Сумма не указана'"></div>
             <span class="badge" :class="badgeClass(inv.status)" x-text="inv.status"></span>
           </div>
         </div>
-        <!-- Кнопка запроса акта для оплаченных услуг -->
-        <template x-if="inv.type==='оплата услуги'&&inv.status==='исполнено'">
-          <div style="margin-top:8px;display:flex;align-items:center;gap:8px">
-            <template x-if="!inv.actStatus">
-              <button class="btn btn-sm" @click="requestAct(inv.invoiceId)">📄 Запросить акт</button>
-            </template>
-            <template x-if="inv.actStatus==='запрошен'">
-              <span class="badge bc">Акт запрошен · ожидает формирования</span>
-            </template>
-            <template x-if="inv.actStatus==='готов'">
-              <button class="btn btn-sm btn-green" @click="openActModal(inv.invoiceId)">📄 Акт выполненных работ</button>
-            </template>
-          </div>
-        </template>
-      </div>
-    </template>
-    <!-- Счета за торги для ОТ -->
-    <template x-if="currentRole==='ot'&&(db.tradeInvoices||[]).filter(t=>t.organizerId===currentUserId).length>0">
-      <div style="margin-top:20px">
-        <div class="stitle">Счета за проведение торгов</div>
-        <template x-for="ti in (db.tradeInvoices||[]).filter(t=>t.organizerId===currentUserId).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt))" :key="ti.tradeInvoiceId">
-          <div class="inv-item">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
-              <div>
-                <div style="font-size:13px;font-weight:600;margin-bottom:2px" x-text="ti.description"></div>
-                <div style="font-size:11px;color:var(--text2)" x-text="fmtDt(ti.createdAt)"></div>
-                <template x-if="ti.paidAt"><div style="font-size:10px;color:var(--text3)" x-text="'Оплачен: '+fmtDt(ti.paidAt)"></div></template>
-              </div>
-              <div style="text-align:right;flex-shrink:0">
-                <div style="font-size:14px;font-weight:700;margin-bottom:4px;color:var(--text2)" x-text="ti.amount?fmt(ti.amount):'Сумма не указана'"></div>
-                <span class="badge" :class="({'ожидает выставления':'bc','выставлен':'bp','оплачен':'bs'})[ti.status]||'bc'" x-text="ti.status"></span>
-              </div>
-            </div>
-            <template x-if="ti.status==='выставлен'&&ti.amount">
-              <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-                <button class="btn btn-p btn-sm" @click="payTradeInvoice(ti.tradeInvoiceId)">Оплатить с счёта услуг</button>
+        <!-- Кнопки для счёта за торги -->
+        <template x-if="inv.type==='trade_invoice'">
+          <div style="margin-top:8px">
+            <template x-if="inv.status==='выставлен'&&inv.amount">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <button class="btn btn-p btn-sm" @click="payTradeInvoice(inv.invoiceId)">Оплатить с счёта услуг</button>
                 <span style="font-size:11px;color:var(--text2)">Доступно: <b x-text="fmt((db.accounts.find(a=>a.userId===currentUserId&&a.subAccountTypeId==='02')?.balanceFree||0)+(db.accounts.find(a=>a.userId===currentUserId&&a.subAccountTypeId==='02')?.balanceVirtual||0))"></b></span>
               </div>
             </template>
-            <template x-if="ti.status==='оплачен'">
-              <div style="margin-top:8px;display:flex;align-items:center;gap:8px">
-                <template x-if="!ti.actStatus">
-                  <button class="btn btn-sm" @click="requestActTI(ti.tradeInvoiceId)">📄 Запросить акт</button>
+            <template x-if="inv.status==='оплачен'||inv.status==='оплачено вне ЭТП'">
+              <div style="display:flex;align-items:center;gap:8px">
+                <template x-if="!docRequestStatus(inv.invoiceId,'act')">
+                  <button class="btn btn-sm" @click="requestDoc(inv.invoiceId,'act')">📄 Запросить акт</button>
                 </template>
-                <template x-if="ti.actStatus==='запрошен'">
-                  <span class="badge bc">Акт запрошен · ожидает формирования</span>
+                <template x-if="docRequestStatus(inv.invoiceId,'act')==='pending'">
+                  <span class="badge bc">Акт запрошен</span>
                 </template>
-                <template x-if="ti.actStatus==='готов'">
-                  <button class="btn btn-sm btn-green" @click="openActModalTI(ti.tradeInvoiceId)">📄 Акт выполненных работ</button>
+                <template x-if="docRequestStatus(inv.invoiceId,'act')==='ready'">
+                  <button class="btn btn-sm btn-green" @click="openActModal(inv.invoiceId)">📄 Акт выполненных работ</button>
                 </template>
               </div>
+            </template>
+          </div>
+        </template>
+        <!-- Акт для оплаченных услуг -->
+        <template x-if="inv.type==='оплата услуги'&&inv.status==='исполнено'">
+          <div style="margin-top:8px;display:flex;align-items:center;gap:8px">
+            <template x-if="!docRequestStatus(inv.invoiceId,'act')">
+              <button class="btn btn-sm" @click="requestDoc(inv.invoiceId,'act')">📄 Запросить акт</button>
+            </template>
+            <template x-if="docRequestStatus(inv.invoiceId,'act')==='pending'">
+              <span class="badge bc">Акт запрошен · ожидает формирования</span>
+            </template>
+            <template x-if="docRequestStatus(inv.invoiceId,'act')==='ready'">
+              <button class="btn btn-sm btn-green" @click="openActModal(inv.invoiceId)">📄 Акт выполненных работ</button>
             </template>
           </div>
         </template>
@@ -489,14 +493,14 @@
       <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 16px;min-width:180px">
         <div style="font-size:10px;color:var(--text3);margin-bottom:2px">Р/с услуг УТ</div>
         <div style="font-size:13px;font-weight:600;color:var(--blue)"
-          x-text="fmt(db.transactions.filter(t=>db.accounts.find(a=>a.accountId===t.accountId)?.subAccountTypeId==='01'&&t.type==='пополнение'&&t.status==='завершена').reduce((s,t)=>s+t.amount,0))"></div>
-        <div style="font-size:10px;color:var(--text3)">Сумма подтверждённых пополнений УТ</div>
+          x-text="fmt(db.transactions.filter(t=>db.accounts.find(a=>a.accountId===t.accountId)?.subAccountTypeId==='01'&&t.type==='пополнение'&&t.status==='завершена').reduce((s,t)=>s+t.amount,0) - db.transactions.filter(t=>db.accounts.find(a=>a.accountId===t.accountId)?.subAccountTypeId==='01'&&t.type==='вывод'&&t.status==='завершена').reduce((s,t)=>s+Math.abs(t.amount),0))"></div>
+        <div style="font-size:10px;color:var(--text3)">Пополнения минус выводы (УТ)</div>
       </div>
       <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 16px;min-width:180px">
         <div style="font-size:10px;color:var(--text3);margin-bottom:2px">Р/с услуг ОТ</div>
         <div style="font-size:13px;font-weight:600;color:var(--blue)"
-          x-text="fmt(db.transactions.filter(t=>db.accounts.find(a=>a.accountId===t.accountId)?.subAccountTypeId==='02'&&t.type==='пополнение'&&t.status==='завершена').reduce((s,t)=>s+t.amount,0))"></div>
-        <div style="font-size:10px;color:var(--text3)">Сумма подтверждённых пополнений ОТ</div>
+          x-text="fmt(db.transactions.filter(t=>db.accounts.find(a=>a.accountId===t.accountId)?.subAccountTypeId==='02'&&t.type==='пополнение'&&t.status==='завершена').reduce((s,t)=>s+t.amount,0) - db.transactions.filter(t=>db.accounts.find(a=>a.accountId===t.accountId)?.subAccountTypeId==='02'&&(t.type==='вывод'||t.type==='вывод задатка')&&t.status==='завершена').reduce((s,t)=>s+Math.abs(t.amount),0))"></div>
+        <div style="font-size:10px;color:var(--text3)">Пополнения минус выводы (ОТ)</div>
       </div>
       <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 16px;min-width:180px">
         <div style="font-size:10px;color:var(--text3);margin-bottom:2px">Р/с задатков ЦДТ</div>
@@ -537,10 +541,10 @@
     </template>
 
     <!-- Заявки на выставление счёта за торги -->
-    <template x-if="(db.tradeInvoices||[]).filter(t=>t.status==='ожидает выставления').length>0">
+    <template x-if="db.invoices.filter(i=>i.type==='trade_invoice'&&i.status==='ожидает выставления').length>0">
       <div>
         <div class="stitle" style="margin-top:16px;margin-bottom:8px">Счета за торги</div>
-        <template x-for="ti in (db.tradeInvoices||[]).filter(t=>t.status==='ожидает выставления')" :key="ti.tradeInvoiceId">
+        <template x-for="ti in db.invoices.filter(i=>i.type==='trade_invoice'&&i.status==='ожидает выставления')" :key="ti.invoiceId">
           <div class="inv-1c-item">
             <div class="inv-1c-row">
               <div style="flex:1;min-width:0">
@@ -558,13 +562,13 @@
                   <option value="25000">Расширенный — 25 000 ₽</option>
                   <option value="50000">Премиум — 50 000 ₽</option>
                 </select>
-                <button class="btn-confirm" @click="confirmTI(ti.tradeInvoiceId, ti._amt||0)">Выставить</button>
+                <button class="btn-confirm" @click="confirmTI(ti.invoiceId, ti._amt||0)">Выставить</button>
               </div>
             </div>
           </div>
         </template>
         <!-- Выставленные — кнопка "Оплачено вне ЭТП" -->
-        <template x-for="ti in (db.tradeInvoices||[]).filter(t=>t.status==='выставлен')" :key="'ext-'+ti.tradeInvoiceId">
+        <template x-for="ti in db.invoices.filter(i=>i.type==='trade_invoice'&&i.status==='выставлен')" :key="'ext-'+ti.invoiceId">
           <div class="inv-1c-item" style="margin-top:6px">
             <div class="inv-1c-row">
               <div style="flex:1;min-width:0">
@@ -574,31 +578,83 @@
               </div>
               <span class="badge bp" style="margin:0 12px">выставлен</span>
               <button class="btn btn-sm" style="background:var(--amber-lt);border-color:var(--amber);color:var(--amber)"
-                @click="markTIPaidExternal(ti.tradeInvoiceId)">Оплачено вне ЭТП</button>
+                @click="markTIPaidExternal(ti.invoiceId)">Оплачено вне ЭТП</button>
             </div>
           </div>
         </template>
       </div>
     </template>
 
-    <!-- Запросы актов выполненных работ -->
-    <template x-if="actsRequested.length>0">
+    <!-- Запросы актов выполненных работ (DocRequests) -->
+    <template x-if="pendingDocRequests.length>0">
       <div style="margin-bottom:16px">
         <div class="stitle" style="margin-bottom:8px">Запросы актов выполненных работ</div>
-        <template x-for="inv in actsRequested" :key="'act-'+inv.invoiceId">
+        <template x-for="dr in pendingDocRequests" :key="dr.docRequestId">
           <div class="inv-1c-item">
             <div class="inv-1c-row">
               <div style="flex:1;min-width:0">
-                <div style="font-size:12px;font-weight:600;margin-bottom:1px" x-text="inv.description"></div>
-                <div style="font-size:10px;color:var(--text2)" x-text="fmtDtFlex(inv.actRequestedAt,showSeconds)+' · '+(userByAccId(inv.accountId)?.label||'')+' · '+fmt(inv.amount)"></div>
-                <div style="font-size:10px;color:var(--text3);font-family:var(--mono)" x-text="'№ ЭТП: '+inv.requestId"></div>
+                <div style="font-size:12px;font-weight:600;margin-bottom:1px" x-text="dr.description"></div>
+                <div style="font-size:10px;color:var(--text2)" x-text="fmtDtFlex(dr.requestedAt,showSeconds)+' · '+(db.invoices.find(i=>i.invoiceId===dr.refId)?.requestId||'')"></div>
               </div>
-              <button class="btn-confirm" @click="confirm1C(inv.invoiceId)">✓ Акт сформирован</button>
+              <button class="btn-confirm" @click="confirmDocRequest(dr.docRequestId)">✓ Акт сформирован</button>
             </div>
           </div>
         </template>
       </div>
     </template>
+
+    <!-- Ручное выставление счёта бухгалтером -->
+    <div style="margin-bottom:16px">
+      <div class="stitle" style="margin-bottom:8px">Выставить счёт вручную</div>
+      <div x-data="{manAccId:'',manDesc:'',manAmt:'',manType:'trade_invoice',manError:''}"
+           style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+          <div class="fg" style="flex:1;min-width:160px;margin:0">
+            <label class="fl" style="font-size:10px">Контрагент (ОТ)</label>
+            <select class="fi" style="font-size:11px;padding:4px 8px" x-model="manAccId">
+              <option value="">— выберите —</option>
+              <template x-for="acc in db.accounts.filter(a=>a.subAccountTypeId==='02')" :key="acc.accountId">
+                <option :value="acc.accountId" x-text="(db.accounts.find(a=>a.accountId===acc.accountId)&&USERS?USERS.find(u=>u.userId===acc.userId)?.name||acc.displayNumber:acc.displayNumber)"></option>
+              </template>
+            </select>
+          </div>
+          <div class="fg" style="flex:1;min-width:140px;margin:0">
+            <label class="fl" style="font-size:10px">Тип счёта</label>
+            <select class="fi" style="font-size:11px;padding:4px 8px" x-model="manType">
+              <option value="trade_invoice">Счёт за торги</option>
+              <option value="service_invoice">Счёт за услуги ЭТП</option>
+            </select>
+          </div>
+          <div class="fg" style="flex:2;min-width:180px;margin:0">
+            <label class="fl" style="font-size:10px">Описание</label>
+            <input class="fi" type="text" style="font-size:11px;padding:4px 8px" x-model="manDesc" placeholder="Например: за торги № 481203">
+          </div>
+          <div class="fg" style="flex:1;min-width:120px;margin:0">
+            <label class="fl" style="font-size:10px">Сумма, ₽</label>
+            <input class="fi" type="number" style="font-size:11px;padding:4px 8px" x-model="manAmt" placeholder="0">
+          </div>
+          <button class="btn-confirm" style="flex-shrink:0"
+            @click="
+              if(!manAccId||!manDesc||!manAmt){manError='Заполните все поля';return;}
+              const amt=parseFloat(manAmt);
+              if(!amt||amt<=0){manError='Укажите корректную сумму';return;}
+              db.invoices.push({
+                invoiceId:genId('INV'), accountId:manAccId,
+                type:manType, status:'выставлен',
+                amount:amt, createdAt:new Date().toISOString(),
+                completedAt:null, paidAt:null,
+                requestId:reqIdGen('I'),
+                paidExternal:false,
+                description:manDesc
+              });
+              saveDB(db);
+              manAccId=''; manDesc=''; manAmt=''; manError='';
+              alert('Счёт выставлен');
+            ">Выставить</button>
+        </div>
+        <div x-show="manError" style="font-size:11px;color:var(--red);margin-top:6px" x-text="manError"></div>
+      </div>
+    </div>
 
     <div class="done-list">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
@@ -634,33 +690,23 @@
                   <td style="font-size:10px;font-family:var(--mono);white-space:nowrap" x-text="inv.requestId||'—'"></td>
                   <td style="font-size:11px;white-space:nowrap" x-text="fmtDtFlex(inv.createdAt,showSeconds)"></td>
                   <td style="font-size:11px;white-space:nowrap;color:var(--text2)" x-text="inv.completedAt?fmtDtFlex(inv.completedAt,showSeconds):'—'"></td>
-                  <td style="font-size:11px" x-text="inv.description||inv.type"></td>
+                  <td style="font-size:11px">
+                    <span x-text="inv.description||inv.type"></span>
+                    <span x-show="inv.type==='trade_invoice'||inv.type==='service_invoice'" class="badge bc" style="margin-left:4px;font-size:9px">счёт</span>
+                    <span x-show="inv.paidExternal" class="badge bp" style="margin-left:4px;font-size:9px">вне ЭТП</span>
+                  </td>
                   <td>
-                    <span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:6px"
+                    <span style="font-size:9px;font-weight:600;padding:2px 7px;border-radius:6px"
                       :style="sync1cAccountType(inv)==='ut_svc'?'background:#E6F1FB;color:#0C447C':sync1cAccountType(inv)==='ot_svc'?'background:#EAF3DE;color:#085041':'background:#FFF3CD;color:#856404'"
                       x-text="sync1cAccountLabel(inv)"></span>
                   </td>
-                  <td style="white-space:nowrap" :class="inv.type==='пополнение'?'tx-plus':'tx-minus'" x-text="(inv.type==='пополнение'?'+':'−')+fmt(inv.amount)"></td>
+                  <td style="white-space:nowrap"
+                    :class="inv.amount!=null?(inv.type==='пополнение'?'tx-plus':'tx-minus'):''"
+                    x-text="inv.amount!=null?(inv.type==='пополнение'?'+':'−')+fmt(inv.amount):'—'"></td>
                   <td><span class="badge" :class="badgeClass(inv.status)" x-text="inv.status"></span></td>
                 </tr>
               </template>
-              <!-- Счета за торги в той же таблице -->
-              <template x-for="ti in (db.tradeInvoices||[]).filter(t=>['выставлен','оплачен','оплачено вне ЭТП'].includes(t.status)&&(sync1cFilter==='all'||sync1cFilter==='ot_svc')).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt))" :key="'ti-d-'+ti.tradeInvoiceId">
-                <tr>
-                  <td style="font-size:10px;font-family:var(--mono);white-space:nowrap" x-text="ti.requestId||'—'"></td>
-                  <td style="font-size:11px;white-space:nowrap" x-text="fmtDtFlex(ti.createdAt,showSeconds)"></td>
-                  <td style="font-size:11px;white-space:nowrap;color:var(--text2)" x-text="ti.paidAt?fmtDtFlex(ti.paidAt,showSeconds):'—'"></td>
-                  <td style="font-size:11px" x-text="ti.description+' · '+bidderName(ti.organizerId)"></td>
-                  <td><span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:6px;background:#EAF3DE;color:#085041">Счёт для услуг ОТ</span></td>
-                  <td style="white-space:nowrap;color:var(--green-dk)" x-text="ti.amount?fmt(ti.amount):'—'"></td>
-                  <td>
-                    <span class="badge" :class="ti.status==='оплачен'?'bs':ti.status==='оплачено вне ЭТП'?'bp':'bc'" x-text="ti.status"></span>
-                    <template x-if="ti.paidExternal">
-                      <span class="badge bc" style="margin-left:4px">вне ЭТП</span>
-                    </template>
-                  </td>
-                </tr>
-              </template>
+
             </tbody>
           </table>
         </div>
@@ -998,19 +1044,19 @@
           <!-- Оплата услуг ЭТП из задатка — несколько счетов -->
           <template x-if="wdDepType==='service'">
             <div>
-              <template x-if="(db.tradeInvoices||[]).filter(t=>t.organizerId===currentUserId&&t.status==='выставлен'&&t.amount).length===0">
+              <template x-if="db.invoices.filter(i=>i.type==='trade_invoice'&&i.accountId&&db.accounts.find(a=>a.accountId===i.accountId)?.userId===currentUserId&&i.status==='выставлен'&&i.amount).length===0">
                 <div class="wbox">Нет выставленных счетов к оплате.</div>
               </template>
-              <template x-if="(db.tradeInvoices||[]).filter(t=>t.organizerId===currentUserId&&t.status==='выставлен'&&t.amount).length>0">
+              <template x-if="db.invoices.filter(i=>i.type==='trade_invoice'&&i.accountId&&db.accounts.find(a=>a.accountId===i.accountId)?.userId===currentUserId&&i.status==='выставлен'&&i.amount).length>0">
                 <div>
                   <div class="fg">
                     <label class="fl">Счета к оплате (можно выбрать несколько)</label>
                     <div style="display:flex;flex-direction:column;gap:0">
-                    <template x-for="ti in (db.tradeInvoices||[]).filter(t=>t.organizerId===currentUserId&&t.status==='выставлен'&&t.amount)" :key="ti.tradeInvoiceId">
+                    <template x-for="ti in db.invoices.filter(i=>i.type==='trade_invoice'&&i.accountId&&db.accounts.find(a=>a.accountId===i.accountId)?.userId===currentUserId&&i.status==='выставлен'&&i.amount)" :key="ti.invoiceId">
                       <label style="display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:6px;cursor:pointer;font-size:12px;width:100%;box-sizing:border-box;clear:both"
-                             :style="(wdDepSelectedInvoices||[]).includes(ti.tradeInvoiceId)?'border-color:var(--blue);background:var(--blue-lt)':''">
-                        <input type="checkbox" :checked="(wdDepSelectedInvoices||[]).includes(ti.tradeInvoiceId)"
-                          @change="wdDepSelectedInvoices=($event.target.checked?[...(wdDepSelectedInvoices||[]),ti.tradeInvoiceId]:(wdDepSelectedInvoices||[]).filter(id=>id!==ti.tradeInvoiceId))">
+                             :style="(wdDepSelectedInvoices||[]).includes(ti.invoiceId)?'border-color:var(--blue);background:var(--blue-lt)':''">
+                        <input type="checkbox" :checked="(wdDepSelectedInvoices||[]).includes(ti.invoiceId)"
+                          @change="wdDepSelectedInvoices=($event.target.checked?[...(wdDepSelectedInvoices||[]),ti.invoiceId]:(wdDepSelectedInvoices||[]).filter(id=>id!==ti.invoiceId))">
                         <span style="flex:1" x-text="ti.description"></span>
                         <span style="font-weight:600;color:var(--blue)" x-text="fmt(ti.amount)"></span>
                       </label>
@@ -1020,14 +1066,14 @@
                   <template x-if="(wdDepSelectedInvoices||[]).length>0">
                     <div>
                       <div style="font-size:12px;color:var(--text2);margin-bottom:8px">
-                        Итого к зачёту: <b style="color:var(--blue)" x-text="fmt(Math.min(selectedDepositForWithdraw?.amount||0, (db.tradeInvoices||[]).filter(t=>(wdDepSelectedInvoices||[]).includes(t.tradeInvoiceId)).reduce((s,t)=>s+(t.amount||0),0)))"></b>
+                        Итого к зачёту: <b style="color:var(--blue)" x-text="fmt(Math.min(selectedDepositForWithdraw?.amount||0, db.invoices.filter(i=>i.type==='trade_invoice'&&(wdDepSelectedInvoices||[]).includes(i.invoiceId)).reduce((s,t)=>s+(t.amount||0),0)))"></b>
                         из задатка <b x-text="fmt(selectedDepositForWithdraw?.amount||0)"></b>
                       </div>
                       <!-- остаток -->
-                      <template x-if="(selectedDepositForWithdraw?.amount||0) > (db.tradeInvoices||[]).filter(t=>(wdDepSelectedInvoices||[]).includes(t.tradeInvoiceId)).reduce((s,t)=>s+(t.amount||0),0)">
+                      <template x-if="(selectedDepositForWithdraw?.amount||0) > db.invoices.filter(i=>i.type==='trade_invoice'&&(wdDepSelectedInvoices||[]).includes(i.invoiceId)).reduce((s,t)=>s+(t.amount||0),0)">
                         <div>
                           <div class="ibox">
-                            Остаток после оплаты счетов: <b x-text="fmt((selectedDepositForWithdraw?.amount||0)-(db.tradeInvoices||[]).filter(t=>(wdDepSelectedInvoices||[]).includes(t.tradeInvoiceId)).reduce((s,t)=>s+(t.amount||0),0))"></b>
+                            Остаток после оплаты счетов: <b x-text="fmt((selectedDepositForWithdraw?.amount||0)-db.invoices.filter(i=>i.type==='trade_invoice'&&(wdDepSelectedInvoices||[]).includes(i.invoiceId)).reduce((s,t)=>s+(t.amount||0),0))"></b>
                           </div>
                           <div class="fg"><label class="fl">Вывести остаток на</label>
                             <select class="fi" x-model="wdDepRestType">
@@ -1050,9 +1096,9 @@
                         </div>
                       </template>
                       <!-- задатка не хватает на все счета -->
-                      <template x-if="(selectedDepositForWithdraw?.amount||0) < (db.tradeInvoices||[]).filter(t=>(wdDepSelectedInvoices||[]).includes(t.tradeInvoiceId)).reduce((s,t)=>s+(t.amount||0),0)">
+                      <template x-if="(selectedDepositForWithdraw?.amount||0) < db.invoices.filter(i=>i.type==='trade_invoice'&&(wdDepSelectedInvoices||[]).includes(i.invoiceId)).reduce((s,t)=>s+(t.amount||0),0)">
                         <div class="wbox">
-                          Задатка не хватает для оплаты всех выбранных счетов. Нехватка: <b x-text="fmt((db.tradeInvoices||[]).filter(t=>(wdDepSelectedInvoices||[]).includes(t.tradeInvoiceId)).reduce((s,t)=>s+(t.amount||0),0)-(selectedDepositForWithdraw?.amount||0))"></b>.
+                          Задатка не хватает для оплаты всех выбранных счетов. Нехватка: <b x-text="fmt(db.invoices.filter(i=>i.type==='trade_invoice'&&(wdDepSelectedInvoices||[]).includes(i.invoiceId)).reduce((s,t)=>s+(t.amount||0),0)-(selectedDepositForWithdraw?.amount||0))"></b>.
                           Остаток будет доплачен со счёта услуг автоматически.
                         </div>
                       </template>
@@ -1334,11 +1380,10 @@
       <div x-data="{
         get rec() {
           if(!actInvoiceId) return null;
-          if(actInvoiceId.startsWith('TI:')){
-            const ti=(db.tradeInvoices||[]).find(t=>t.tradeInvoiceId===actInvoiceId.slice(3));
-            return ti?{requestId:ti.tradeInvoiceId,actIssuedAt:ti.actIssuedAt,description:ti.description,amount:ti.amount}:null;
-          }
-          return db.invoices.find(i=>i.invoiceId===actInvoiceId)||null;
+          const inv=db.invoices.find(i=>i.invoiceId===actInvoiceId);
+          if(!inv) return null;
+          const dr=(db.docRequests||[]).find(r=>r.refId===actInvoiceId&&r.status==='ready');
+          return {...inv, actIssuedAt:dr?.issuedAt||null};
         }
       }">
         <template x-if="rec">
