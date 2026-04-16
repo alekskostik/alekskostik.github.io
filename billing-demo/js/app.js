@@ -15,7 +15,7 @@ document.addEventListener('alpine:init', () => {
     finishAuctionId:null,
     contractAuctionId:null, contractWith:null,
     admVirtualAccId:null, admVirtualAmt:'', admVirtualDesc:'', admVirtualExpiry:'', admVirtualError:'',
-    sync1cFilter:'all',
+    sync1cFilter:'all', debtThresholdDays:0,
     prcName:'', prcInn:'', prcKpp:'', prcBank:'', prcBik:'', prcAccNum:'', prcError:'', prcLoading:false,
     actInvoiceId:null,
 
@@ -41,7 +41,7 @@ document.addEventListener('alpine:init', () => {
 
     get accs()         { return this.isAdmin?[]:accsForRole(this.db,this.currentRole,this.currentUserId); },
     get txs()          { return txsForUser(this.db,this.currentUserId); },
-    get invs()         { return invsForUser(this.db,this.currentUserId); },
+    get invs()         { return invsForUser(this.db,this.currentUserId).filter(i=>!i.internal); },
     get reqs()         { return reqsForUser(this.db,this.currentUserId); },
     get allInvs()      { return [...this.db.invoices].sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)); },
     get actsRequested() {
@@ -171,6 +171,7 @@ document.addEventListener('alpine:init', () => {
     // ── Тип счёта зачисления для 1С ──
     sync1cAccountType(inv) {
       if(inv.type==='trade_invoice'||inv.type==='service_invoice') return 'ot_svc';
+      if(inv.type==='internal_transfer') return 'deposit';
       const acc=this.db.accounts.find(a=>a.accountId===inv.accountId);
       if(!acc) return 'all';
       if(acc.subAccountTypeId==='01') return 'ut_svc';
@@ -296,22 +297,36 @@ document.addEventListener('alpine:init', () => {
           // оплачиваем выбранные счета из задатка (FIFO по сумме)
           const svcAcc=this.db.accounts.find(a=>a.userId===this.currentUserId&&a.subAccountTypeId==='02');
           const selectedTIs=this.db.invoices.filter(i=>i.type==='trade_invoice'&&this.wdDepSelectedInvoices.includes(i.invoiceId));
+          let totalPaidFromDeposit=0;
           for(const ti of selectedTIs){
             if(remaining<=0) break;
             const pay=Math.min(ti.amount||0, remaining);
             remaining-=pay;
-            // задаток гасит счёт напрямую — деньги уходят в ЦДТ, не на счёт услуг ОТ
+            totalPaidFromDeposit+=pay;
             if(pay>=(ti.amount||0)){
               ti.status='оплачен'; ti.paidAt=now;
             }
             this.db.transactions.unshift({txId:genId('TX'),accountId:acc.accountId,type:'зачёт задатка в оплату счёта',status:'завершена',amount:-pay,createdAt:now,description:'Зачёт задатка в оплату счёта за торги '+dep.auctionId+' ('+ti.description+')'});
-            // если задатка не хватило на весь счёт — доплачиваем со счёта услуг ОТ
+            // если задатка не хватило — доплачиваем со счёта услуг ОТ
             const diff=(ti.amount||0)-pay;
             if(diff>0&&svcAcc&&svcAcc.balanceFree>=diff){
               svcAcc.balanceFree-=diff;
               this.db.transactions.unshift({txId:genId('TX'),accountId:svcAcc.accountId,type:'доплата по счёту за торги',status:'завершена',amount:-diff,createdAt:now,description:'Доплата остатка счёта за торги ('+ti.description+')'});
               ti.status='оплачен'; ti.paidAt=now;
             }
+          }
+          // П.2: фиксируем внутренний перевод задатковый р/с → р/с услуг ОТ
+          // Это внутренняя проводка ЦДТ (POST /deposit-payments в 1С), не видна в ЛК пользователя
+          // Отображается только в "Обработке 1С" как системная операция
+          if(totalPaidFromDeposit>0){
+            this.db.invoices.push({
+              invoiceId:genId('INV'), accountId:acc.accountId,
+              type:'internal_transfer', status:'завершена',
+              amount:totalPaidFromDeposit, createdAt:now, completedAt:now,
+              requestId:reqIdGen('T'),
+              description:'Авто-перевод задатковый р/с → р/с услуг ОТ (торги '+dep.auctionId+')',
+              internal:true
+            });
           }
         }
 

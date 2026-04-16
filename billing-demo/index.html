@@ -159,6 +159,13 @@
                   <span style="font-size:10px" x-text="' ('+db.invoices.filter(i=>i.accountId===acc.accountId&&(i.type==='trade_invoice'||i.type==='service_invoice')&&i.status==='выставлен'&&i.amount).length+' сч.)'"></span>
                 </span>
               </template>
+              <template x-if="db.invoices.filter(i=>i.accountId===acc.accountId&&(i.type==='trade_invoice'||i.type==='service_invoice')&&i.status==='выставлен'&&i.amount&&new Date(i.createdAt)<new Date(Date.now()-debtThresholdDays*24*60*60*1000)).length>0">
+                <div style="margin-top:3px">
+                  <span style="background:#FEE;color:var(--red);font-size:10px;font-weight:600;padding:1px 7px;border-radius:5px">
+                    Долг: <span x-text="fmt(db.invoices.filter(i=>i.accountId===acc.accountId&&(i.type==='trade_invoice'||i.type==='service_invoice')&&i.status==='выставлен'&&i.amount&&new Date(i.createdAt)<new Date(Date.now()-debtThresholdDays*24*60*60*1000)).reduce((s,i)=>s+i.amount,0))"></span>
+                  </span>
+                </div>
+              </template>
               <template x-if="!db.invoices.filter(i=>i.accountId===acc.accountId&&(i.type==='trade_invoice'||i.type==='service_invoice')&&i.status==='выставлен'&&i.amount).length">
                 <span style="color:var(--text3)">Счетов к оплате нет</span>
               </template>
@@ -198,7 +205,8 @@
       <template x-if="currentRole==='ut'"><button class="op-btn" @click="openFundsDeposit(null)">+ Пополнить задатковый</button></template>
       <button class="op-btn" @click="openWithdraw(null)">↑ Вывести д/с</button>
       <button class="op-btn" @click="openModal('pay')">◈ Оплатить услугу</button>
-      <template x-if="currentRole==='ot'"><button class="op-btn" @click="openTransfer()">⇄ Перевод с задаткового на услуги</button></template>
+      <!-- Перевод с задаткового на услуги временно скрыт -->
+      <!-- <template x-if="currentRole==='ot'"><button class="op-btn" @click="openTransfer()">⇄ Перевод с задаткового на услуги</button></template> -->
     </div>
     <div class="stitle">История операций</div>
     <table class="htable">
@@ -486,6 +494,15 @@
   <!-- ОБРАБОТКА 1С -->
   <section class="pg" :class="{active:page==='sync1c'}">
     <div class="ptitle">Обработка заявок 1С</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <span style="font-size:11px;color:var(--text2)">Плашка «Долг» на счёте услуг:</span>
+      <template x-for="opt in [{v:0,l:'При любых счетах'},{v:5,l:'Счета старше 5 дней'},{v:14,l:'Старше 14 дней'}]" :key="opt.v">
+        <button class="btn btn-sm" style="font-size:10px"
+          :class="debtThresholdDays===opt.v?'btn-p':''"
+          @click="debtThresholdDays=opt.v"
+          x-text="opt.l"></button>
+      </template>
+    </div>
     <div class="panel-warn">⚠ <strong>Тестовый инструмент</strong> — не является частью личного кабинета. Имитирует ответ учётной системы 1С.</div>
 
     <!-- Балансы расчётных счетов ЦДТ -->
@@ -499,7 +516,7 @@
       <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 16px;min-width:180px">
         <div style="font-size:10px;color:var(--text3);margin-bottom:2px">Р/с услуг ОТ</div>
         <div style="font-size:13px;font-weight:600;color:var(--blue)"
-          x-text="fmt(db.transactions.filter(t=>db.accounts.find(a=>a.accountId===t.accountId)?.subAccountTypeId==='02'&&t.type==='пополнение'&&t.status==='завершена').reduce((s,t)=>s+t.amount,0) - db.transactions.filter(t=>db.accounts.find(a=>a.accountId===t.accountId)?.subAccountTypeId==='02'&&(t.type==='вывод'||t.type==='вывод задатка')&&t.status==='завершена').reduce((s,t)=>s+Math.abs(t.amount),0))"></div>
+          x-text="fmt(db.transactions.filter(t=>db.accounts.find(a=>a.accountId===t.accountId)?.subAccountTypeId==='02'&&t.type==='пополнение'&&t.status==='завершена').reduce((s,t)=>s+t.amount,0) - db.transactions.filter(t=>db.accounts.find(a=>a.accountId===t.accountId)?.subAccountTypeId==='02'&&(t.type==='вывод'||t.type==='вывод задатка')&&t.status==='завершена').reduce((s,t)=>s+Math.abs(t.amount),0) + db.invoices.filter(i=>i.type==='internal_transfer'&&i.status==='завершена'&&i.internal).reduce((s,i)=>s+(i.amount||0),0))"></div>
         <div style="font-size:10px;color:var(--text3)">Пополнения минус выводы (ОТ)</div>
       </div>
       <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 16px;min-width:180px">
@@ -696,7 +713,7 @@
                     <span x-show="inv.paidExternal" class="badge bp" style="margin-left:4px;font-size:9px">вне ЭТП</span>
                   </td>
                   <td>
-                    <span style="font-size:9px;font-weight:600;padding:2px 7px;border-radius:6px"
+                    <span style="font-size:8px;font-weight:600;padding:1px 5px;border-radius:5px"
                       :style="sync1cAccountType(inv)==='ut_svc'?'background:#E6F1FB;color:#0C447C':sync1cAccountType(inv)==='ot_svc'?'background:#EAF3DE;color:#085041':'background:#FFF3CD;color:#856404'"
                       x-text="sync1cAccountLabel(inv)"></span>
                   </td>
@@ -1044,15 +1061,16 @@
           <!-- Оплата услуг ЭТП из задатка — несколько счетов -->
           <template x-if="wdDepType==='service'">
             <div>
-              <template x-if="db.invoices.filter(i=>i.type==='trade_invoice'&&i.accountId&&db.accounts.find(a=>a.accountId===i.accountId)?.userId===currentUserId&&i.status==='выставлен'&&i.amount).length===0">
-                <div class="wbox">Нет выставленных счетов к оплате.</div>
+              <template x-if="db.invoices.filter(i=>i.type==='trade_invoice'&&i.accountId&&db.accounts.find(a=>a.accountId===i.accountId)?.userId===currentUserId&&i.status==='выставлен'&&i.amount&&(!selectedDepositForWithdraw||i.auctionId===selectedDepositForWithdraw.auctionId)).length===0">
+                <div class="wbox">Нет выставленных счетов к оплате по данному задатку.</div>
               </template>
-              <template x-if="db.invoices.filter(i=>i.type==='trade_invoice'&&i.accountId&&db.accounts.find(a=>a.accountId===i.accountId)?.userId===currentUserId&&i.status==='выставлен'&&i.amount).length>0">
+              <template x-if="db.invoices.filter(i=>i.type==='trade_invoice'&&i.accountId&&db.accounts.find(a=>a.accountId===i.accountId)?.userId===currentUserId&&i.status==='выставлен'&&i.amount&&(!selectedDepositForWithdraw||i.auctionId===selectedDepositForWithdraw.auctionId)).length>0">
                 <div>
+                  <div class="ibox" style="margin-bottom:8px;font-size:11px">Показаны счета по должнику: <b x-text="auctionById(selectedDepositForWithdraw?.auctionId||'')?.debtorName||'—'"></b></div>
                   <div class="fg">
                     <label class="fl">Счета к оплате (можно выбрать несколько)</label>
                     <div style="display:flex;flex-direction:column;gap:0">
-                    <template x-for="ti in db.invoices.filter(i=>i.type==='trade_invoice'&&i.accountId&&db.accounts.find(a=>a.accountId===i.accountId)?.userId===currentUserId&&i.status==='выставлен'&&i.amount)" :key="ti.invoiceId">
+                    <template x-for="ti in db.invoices.filter(i=>i.type==='trade_invoice'&&i.accountId&&db.accounts.find(a=>a.accountId===i.accountId)?.userId===currentUserId&&i.status==='выставлен'&&i.amount&&(!selectedDepositForWithdraw||i.auctionId===selectedDepositForWithdraw.auctionId))" :key="ti.invoiceId">
                       <label style="display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:6px;cursor:pointer;font-size:12px;width:100%;box-sizing:border-box;clear:both"
                              :style="(wdDepSelectedInvoices||[]).includes(ti.invoiceId)?'border-color:var(--blue);background:var(--blue-lt)':''">
                         <input type="checkbox" :checked="(wdDepSelectedInvoices||[]).includes(ti.invoiceId)"
