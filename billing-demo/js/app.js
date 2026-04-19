@@ -27,7 +27,11 @@ document.addEventListener('alpine:init', () => {
     get currentUser()   { return USERS.find(u=>u.userId===this.db.currentUserId); },
     get currentUserId() { return this.db.currentUserId; },
     get currentRole()   { return this.currentUser?.role||'ut'; },
+    get isBR()          { return this.currentRole==='br'; },
+    get isBoth()        { return this.currentRole==='both'; },
     get isAdmin()       { return this.currentRole==='admin'; },
+    get isUT()          { return this.currentRole==='ut'||this.currentRole==='both'; },
+    get isOT()          { return this.currentRole==='ot'||this.currentRole==='both'; },
     switchUser(uid)     { this.db.currentUserId=uid; saveDB(this.db); this.checkExpiredAllocations(); this.page=this.isAdmin?'adminAccounts':'wallet'; },
 
     setTheme(t)     { this.theme=t; applyTheme(t); },
@@ -39,9 +43,39 @@ document.addEventListener('alpine:init', () => {
     loadDemo()  { if(!confirm('Загрузить демонстрационные данные?'))return; loadDemoData(this.db); },
     clearData() { if(!confirm('Очистить все данные?'))return; clearAllData(this.db); },
 
-    get accs()         { return this.isAdmin?[]:accsForRole(this.db,this.currentRole,this.currentUserId); },
-    get txs()          { return txsForUser(this.db,this.currentUserId); },
-    get invs()         { return invsForUser(this.db,this.currentUserId).filter(i=>!i.internal); },
+    get accs()         {
+      if(this.isAdmin) return [];
+      const role=this.currentRole;
+      // Для both: задатковые 03/04 объединены в отдельный блок, в accs только 02
+      // Для BR: только задатковый 03 (01 и 02 скрыты)
+      // Для остальных: 01 скрыт, сортировка 03→04→02
+      let all=accsForUser(this.db,this.currentUserId);
+      if(role==='br') all=all.filter(a=>a.subAccountTypeId==='03');
+      else if(role==='both') all=all.filter(a=>a.subAccountTypeId==='02');
+      else all=all.filter(a=>a.subAccountTypeId!=='01');
+      return all.sort((a,b)=>({'03':0,'04':1,'02':2}[a.subAccountTypeId]||9)-({'03':0,'04':1,'02':2}[b.subAccountTypeId]||9));
+    },
+    get txs()          {
+      return txsForUser(this.db,this.currentUserId).filter(t=>{
+        if(this.currentRole!=='br') return true;
+        if(t.type!=='пополнение') return true;
+        // для БР скрываем пополнения счёта 01 (услуги), но показываем пополнения счёта 03 (задатки)
+        const acc=this.db.accounts.find(a=>a.accountId===t.accountId);
+        return acc?.subAccountTypeId!=='01';
+      });
+    },
+    get invs()         {
+      return invsForUser(this.db,this.currentUserId).filter(i=>{
+        if(i.internal) return false;
+        if(this.currentRole==='br'&&i.type==='пополнение'){
+          const acc=this.db.accounts.find(a=>a.accountId===i.accountId);
+          if(acc?.subAccountTypeId==='01') return false;
+        }
+        // скрываем отклонённые счета за торги/услуги
+        if((i.type==='trade_invoice'||i.type==='service_invoice')&&i.status==='отклонено') return false;
+        return true;
+      });
+    },
     get reqs()         { return reqsForUser(this.db,this.currentUserId); },
     get allInvs()      { return [...this.db.invoices].sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)); },
     get actsRequested() {
@@ -51,10 +85,17 @@ document.addEventListener('alpine:init', () => {
       const pending=['создано','на рассмотрении','в обработке'];
       return this.allInvs.filter(i=>pending.includes(i.status));
     },
+    // Счета, ожидающие оплаты (выставленные — вручную и авто)
+    get issuedInvs() {
+      return this.allInvs.filter(i=>
+        (i.type==='trade_invoice'||i.type==='service_invoice')&&
+        i.status==='выставлен'
+      ).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+    },
     // Счета за торги из единой таблицы invoices
     get myTradeInvs() {
       const myAccIds=accsForUser(this.db,this.currentUserId).map(a=>a.accountId);
-      return this.db.invoices.filter(i=>i.type==='trade_invoice'&&myAccIds.includes(i.accountId))
+      return this.db.invoices.filter(i=>i.type==='trade_invoice'&&(myAccIds.includes(i.accountId)||i.organizerId===this.currentUserId))
         .sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
     },
     get allTradeInvs() {
@@ -103,15 +144,25 @@ document.addEventListener('alpine:init', () => {
     bidderName(uid)      { return USERS.find(u=>u.userId===uid)?.name||uid; },
     auctionById(aid)     { return this.db.auctions.find(a=>a.auctionId===aid); },
 
-    get serviceAccs()  { return accsForRole(this.db,this.currentRole,this.currentUserId).filter(a=>a.subAccountTypeId==='01'||a.subAccountTypeId==='02'); },
-    get depositAccs()  { return accsForRole(this.db,this.currentRole,this.currentUserId).filter(a=>a.subAccountTypeId==='03'); },
+    get serviceAccs()  {
+      if(this.currentRole==='br') return this.db.accounts.filter(a=>a.userId===this.currentUserId&&a.subAccountTypeId==='01');
+      return this.db.accounts.filter(a=>a.userId===this.currentUserId&&a.subAccountTypeId==='02');
+    },
+    get depositAccs()  {
+      const role=this.currentRole;
+      if(role==='ot') return this.db.accounts.filter(a=>a.userId===this.currentUserId&&a.subAccountTypeId==='04');
+      if(role==='both') return this.db.accounts.filter(a=>a.userId===this.currentUserId&&(a.subAccountTypeId==='03'||a.subAccountTypeId==='04'));
+      return this.db.accounts.filter(a=>a.userId===this.currentUserId&&a.subAccountTypeId==='03');
+    },
     get withdrawableAccs() {
-      if(this.currentRole==='ut') return accsForRole(this.db,'ut',this.currentUserId);
+      if(this.currentRole==='ut') return this.db.accounts.filter(a=>a.userId===this.currentUserId&&(a.subAccountTypeId==='02'||a.subAccountTypeId==='03'));
+      if(this.currentRole==='both') return this.db.accounts.filter(a=>a.userId===this.currentUserId&&(a.subAccountTypeId==='02'||a.subAccountTypeId==='03'));
+      if(this.currentRole==='br') return this.db.accounts.filter(a=>a.userId===this.currentUserId&&a.subAccountTypeId==='03');
       return this.serviceAccs;
     },
     get otDepAcc()     { return this.db.accounts.find(a=>a.userId===this.currentUserId&&a.subAccountTypeId==='04')||null; },
     get verifiedReqs() { return reqsForUser(this.db,this.currentUserId).filter(r=>r.isVerified); },
-    get payServices()  { return [{id:'acc',name:'Аккредитация на ЭТП',price:5400},{id:'pub',name:'Публикация торгов',price:12000},{id:'cer',name:'Получение сертификата ЭП',price:3200},{id:'mch',name:'Сервис МЧД',price:1500}]; },
+    get payServices()  { return SERVICES.filter(s=>!s.roles||s.roles.includes(this.currentRole)); },
     get currentPayService() { return this.payServices.find(s=>s.id===this.payServiceId); },
     get servAcc()      { return this.serviceAccs[0]||null; },
     get servAccEffectiveBalance() { const acc=this.servAcc; if(!acc) return 0; return acc.balanceFree+(acc.balanceVirtual||0); },
@@ -167,20 +218,19 @@ document.addEventListener('alpine:init', () => {
       return Math.max(0,inflow-outflow);
     },
 
-    fmt, fmtDt,
-    // ── Тип счёта зачисления для 1С ──
+    fmt, fmtDt, SERVICES, USERS, QR_SVG,
     sync1cAccountType(inv) {
-      if(inv.type==='trade_invoice'||inv.type==='service_invoice') return 'ot_svc';
+      if(inv.type==='trade_invoice'||inv.type==='service_invoice') return 'cdt_svc';
       if(inv.type==='internal_transfer') return 'deposit';
       const acc=this.db.accounts.find(a=>a.accountId===inv.accountId);
       if(!acc) return 'all';
-      if(acc.subAccountTypeId==='01') return 'ut_svc';
-      if(acc.subAccountTypeId==='02') return 'ot_svc';
+      if(acc.subAccountTypeId==='01') return 'ip_svc';
+      if(acc.subAccountTypeId==='02') return 'cdt_svc';
       if(acc.subAccountTypeId==='03'||acc.subAccountTypeId==='04') return 'deposit';
       return 'all';
     },
     sync1cAccountLabel(inv) {
-      return {'ut_svc':'Счёт для услуг УТ','ot_svc':'Счёт для услуг ОТ','deposit':'Счёт задатков ЦДТ'}[this.sync1cAccountType(inv)]||'—';
+      return {'ip_svc':'Р/с услуг ИП','cdt_svc':'Р/с услуг ЦДТ','deposit':'Р/с задатков ЦДТ'}[this.sync1cAccountType(inv)]||'—';
     },
 
     fmtDtFlex(d, withSec) {
@@ -207,7 +257,29 @@ document.addEventListener('alpine:init', () => {
       });
       saveDB(this.db);
     },
-    openActModal(invoiceId) { this.actInvoiceId=invoiceId; this.openModal('actView'); },
+    openActModal(invoiceId)      { this.actInvoiceId=invoiceId; this.openModal('actView'); },
+    openInvRequisites(invoiceId) { this.actInvoiceId=invoiceId; this.openModal('invRequisites'); },
+    openBRService(svcId) {
+      const svc=SERVICES.find(s=>s.id===svcId);
+      if(!svc) return;
+      const acc=this.db.accounts.find(a=>a.userId===this.currentUserId&&a.subAccountTypeId==='01');
+      if(!acc){alert('Счёт не найден');return;}
+      // Генерируем заявку и сразу показываем реквизиты
+      this.brServiceId=svcId;
+      this.brPayRid=reqIdGen('P');
+      this.mStep=0;
+      // Создаём заявку в invoices
+      this.db.invoices.unshift({
+        invoiceId:genId('INV'), accountId:acc.accountId,
+        type:'пополнение', status:'создано',
+        amount:svc.price, requestId:this.brPayRid,
+        createdAt:new Date().toISOString(),
+        description:'Оплата услуги: '+svc.name
+      });
+      saveDB(this.db);
+      this.openModal('brServicePay');
+    },
+
     confirmDocRequest(docRequestId) {
       const dr=(this.db.docRequests||[]).find(r=>r.docRequestId===docRequestId);
       if(!dr) return;
@@ -226,7 +298,7 @@ document.addEventListener('alpine:init', () => {
 
     accForId(id)    { return this.db.accounts.find(a=>a.accountId===id); },
     userByAccId(id) { const acc=this.db.accounts.find(a=>a.accountId===id); return USERS.find(u=>u.userId===acc?.userId); },
-    badgeClass(s)   { return ({'исполнено':'bs','завершена':'bs','на рассмотрении':'bp','создано':'bc','отклонено':'be','в обработке':'bc','зарезервирован':'bc','переведён':'bs','снят резерв':'bs','выведен':'bs','удерживается':'bp','отменён':'be','принята':'bs','победитель':'bs','второй участник':'bp','резерв снят':'bs','победитель (договор)':'bs','Приём заявок':'bs','Протокол опубликован':'bp','Договор подписан':'bs','Приостановлены':'be','Заблокирован':'be','Активен':'bs'})[s]||'bc'; },
+    badgeClass(s)   { return ({'исполнено':'bs','завершена':'bs','на рассмотрении':'bp','создано':'bc','отклонено':'be','отменён':'be','в обработке':'bc','зарезервирован':'bc','переведён':'bs','снят резерв':'bs','выведен':'bs','удерживается':'bp','отменён':'be','принята':'bs','победитель':'bs','второй участник':'bp','резерв снят':'bs','победитель (договор)':'bs','Приём заявок':'bs','Протокол опубликован':'bp','Договор подписан':'bs','Приостановлены':'be','Заблокирован':'be','Активен':'bs'})[s]||'bc'; },
     txClass(tx)     { return tx.type==='резервирование задатка'?'tx-res':tx.amount>0?'tx-plus':'tx-minus'; },
     depositBadge(s) { return ({'зарезервирован':'bc','переведён':'bs','снят резерв':'bs','выведен':'bs','удерживается':'bp','отменён':'be'})[s]||'bc'; },
 
@@ -663,6 +735,17 @@ document.addEventListener('alpine:init', () => {
             this.db.transactions.unshift({txId:genId('TX'),accountId:inv.accountId,type:'погашение виртуальных д/с',status:'завершена',amount:-toRepay,createdAt:now,description:'Погашение виртуальных д/с ('+fmt(toRepay)+')'});
           }
           this.db.transactions.unshift({txId:genId('TX'),accountId:inv.accountId,type:'пополнение',status:'завершена',amount:inv.amount,createdAt:now,description:inv.description+' (подтверждено)',requestId:inv.requestId});
+          // для БР: после подтверждения пополнения создаём запись об оплате услуги
+          if(inv.description&&inv.description.startsWith('Оплата услуги:')){
+            const svcName=inv.description.replace('Оплата услуги: ','');
+            const svc=SERVICES.find(s=>s.name===svcName);
+            if(svc){
+              const svcRid=reqIdGen('S');
+              this.db.invoices.push({invoiceId:genId('INV'),accountId:inv.accountId,type:'оплата услуги',status:'исполнено',amount:inv.amount,requestId:svcRid,createdAt:now,description:'Услуга: '+svcName});
+              // транзакция для истории операций БР
+              this.db.transactions.unshift({txId:genId('TX'),accountId:inv.accountId,type:'оплата услуги',status:'завершена',amount:-inv.amount,virtualPart:0,repaid:false,createdAt:now,description:'Услуга: '+svcName,requestId:svcRid});
+            }
+          }
         }
       }
       if(inv.type==='вывод'||inv.type==='вывод задатка'){
@@ -688,9 +771,20 @@ document.addEventListener('alpine:init', () => {
       saveDB(this.db);
     },
 
-    reject1C(invoiceId) {
+    rejectWithComment(invoiceId) {
+      const reason=window.prompt('Причина отмены:');
+      if(reason===null) return;
+      if(reason) { const inv=this.db.invoices.find(i=>i.invoiceId===invoiceId); if(inv) inv.cancelReason=reason; }
+      this.reject1C(invoiceId, reason||'');
+    },
+
+    reject1C(invoiceId, reason) {
       const inv=this.db.invoices.find(i=>i.invoiceId===invoiceId); if(!inv) return;
-      const now=new Date().toISOString(); inv.status='отклонено'; inv.completedAt=now;
+      const now=new Date().toISOString();
+      // для выставленных счетов — статус 'отменён', для заявок — 'отклонено'
+      inv.status=(inv.status==='выставлен')?'отменён':'отклонено';
+      inv.completedAt=now;
+      if(reason) inv.cancelReason=reason;
       if(inv.type==='вывод'||inv.type==='вывод задатка'||inv.type==='перевод задаткового на услуги'){
         const acc=this.db.accounts.find(a=>a.accountId===inv.accountId);
         if(acc){acc.balanceReserved=Math.max(0,acc.balanceReserved-inv.amount);acc.balanceFree+=inv.amount;}

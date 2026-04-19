@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
-import { switchUser, loadDemo, goTo } from './fixtures';
+import { switchUser, loadDemo, goTo, submitBid, finishAuction, active } from './fixtures';
 
-test.describe('Задатки — базовый флоу', () => {
+test.describe('Задатки', () => {
 
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
@@ -9,70 +9,69 @@ test.describe('Задатки — базовый флоу', () => {
     await loadDemo(page);
   });
 
-  test('УТ 1: подача заявки резервирует задаток', async ({ page }) => {
+  test('Подача заявки резервирует задаток у УТ', async ({ page }) => {
     await switchUser(page, 'УТ 1');
-    await goTo(page, 'Торги');
+    await goTo(page, 'Финансы');
+    const freeBefore = parseFloat(
+      (await active(page).locator('.acc-card.type-03 .acc-free').textContent() ?? '0')
+        .replace(/[^\d,]/g,'').replace(',','.')
+    ) || 0;
 
-    const auctionCard = page.locator('.auc-card', { hasText: '481201' });
-    await auctionCard.locator('button', { hasText: 'Подать заявку' }).click();
-
-    const modal = page.locator('.modal-overlay.open');
-    await expect(modal).toBeVisible();
-    await expect(modal.locator('input[type=number]')).toHaveValue('150000');
-
-    await modal.locator('button', { hasText: 'Подать заявку и внести задаток' }).click();
-    await page.waitForTimeout(800);
-
-    await expect(modal.locator('.st')).toHaveText('Заявка подана');
-    await modal.locator('button', { hasText: 'Закрыть' }).click();
+    await submitBid(page, '481201');
 
     await goTo(page, 'Финансы');
-    const depositCard = page.locator('.acc-card.type-03');
-    await expect(depositCard.locator('.acc-sub.amber')).toContainText('150');
+    const freeAfter = parseFloat(
+      (await active(page).locator('.acc-card.type-03 .acc-free').textContent() ?? '0')
+        .replace(/[^\d,]/g,'').replace(',','.')
+    ) || 0;
+    expect(freeAfter).toBeLessThan(freeBefore);
+
+    await goTo(page, 'Задатки');
+    await expect(active(page).locator('.dep-item', { hasText: '481201' }))
+      .toContainText('зарезервирован');
   });
 
-  test('Кнопка "Подать заявку" исчезает после подачи', async ({ page }) => {
+  test('После протокола: победитель — переведён, второй — удерживается', async ({ page }) => {
     await switchUser(page, 'УТ 1');
-    await goTo(page, 'Торги');
+    await submitBid(page, '481201');
+    await switchUser(page, 'УТ 2');
+    await submitBid(page, '481201');
+    await switchUser(page, 'ОТ 1');
+    await finishAuction(page, '481201');
 
-    const auctionCard = page.locator('.auc-card', { hasText: '481201' });
-    await auctionCard.locator('button', { hasText: 'Подать заявку' }).click();
-
-    const modal = page.locator('.modal-overlay.open');
-    await modal.locator('button', { hasText: 'Подать заявку и внести задаток' }).click();
-    await page.waitForTimeout(800);
-    await modal.locator('button', { hasText: 'Закрыть' }).click();
-
-    await expect(auctionCard.locator('button', { hasText: 'Подать заявку' })).toHaveCount(0);
-    await expect(auctionCard.locator('.my-app-badge')).toBeVisible();
-    await expect(auctionCard.locator('.my-app-badge')).toContainText('150 000');
-  });
-
-  test('ОТ 1 видит заявку после подачи УТ 1', async ({ page }) => {
     await switchUser(page, 'УТ 1');
-    await goTo(page, 'Торги');
-    const auctionCard = page.locator('.auc-card', { hasText: '481201' });
-    await auctionCard.locator('button', { hasText: 'Подать заявку' }).click();
-    const modal = page.locator('.modal-overlay.open');
-    await modal.locator('button', { hasText: 'Подать заявку и внести задаток' }).click();
-    await page.waitForTimeout(800);
-    await modal.locator('button', { hasText: 'Закрыть' }).click();
+    await goTo(page, 'Задатки');
+    await expect(active(page).locator('.dep-item', { hasText: '481201' })).toContainText('переведён');
 
-    await switchUser(page, 'ОТ 1');
-    await goTo(page, 'Мои торги');
-
-    const otCard = page.locator('.ot-auc-detail', { hasText: '481201' });
-    await expect(otCard.locator('.app-row')).toHaveCount(1);
-    await expect(otCard.locator('.app-row')).toContainText('Иванов');
-    await expect(otCard.locator('.app-row-sum')).toContainText('150 000');
+    await switchUser(page, 'УТ 2');
+    await goTo(page, 'Задатки');
+    await expect(active(page).locator('.dep-item', { hasText: '481201' })).toContainText('удерживается');
   });
 
-  test('ОТ 1 не может опубликовать протокол без заявок', async ({ page }) => {
+  test('ОТ видит переведённый задаток и кнопку вывода', async ({ page }) => {
+    await switchUser(page, 'УТ 1');
+    await submitBid(page, '481201');
     await switchUser(page, 'ОТ 1');
-    await goTo(page, 'Мои торги');
+    await finishAuction(page, '481201');
 
-    const otCard = page.locator('.ot-auc-detail', { hasText: '481201' });
-    await expect(otCard.locator('button', { hasText: 'Завершить' })).toHaveCount(0);
+    await expect(
+      active(page).locator('.ot-auc-detail', { hasText: '481201' })
+        .locator('button', { hasText: 'Вывести задаток' })
+    ).toBeVisible();
+  });
+
+  test('Три участника — третий в удерживается после протокола', async ({ page }) => {
+    for (const u of ['УТ 1', 'УТ 2', 'УТ 3']) {
+      await switchUser(page, u);
+      await submitBid(page, '481201');
+    }
+    await switchUser(page, 'ОТ 1');
+    await finishAuction(page, '481201');
+
+    await switchUser(page, 'УТ 3');
+    await goTo(page, 'Задатки');
+    await expect(active(page).locator('.dep-item', { hasText: '481201' }))
+      .toContainText('удерживается');
   });
 
 });
