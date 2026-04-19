@@ -4,7 +4,7 @@ import { switchUser, goTo, topUpService, topUpDeposit, confirm1C, readBalance1C,
 test.describe('Балансы ЦДТ', () => {
 
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
+    await page.goto('');
     await page.waitForSelector('.user-btn', { state: 'visible' });
     page.once('dialog', d => d.accept());
     await page.locator('button', { hasText: '✕ Сброс данных' }).click();

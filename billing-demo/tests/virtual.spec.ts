@@ -18,7 +18,7 @@ async function grantVirtual(page: import('@playwright/test').Page, amount: strin
 test.describe('Виртуальные средства', () => {
 
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
+    await page.goto('');
     await page.waitForSelector('.user-btn', { state: 'visible' });
     await loadDemo(page);
   });

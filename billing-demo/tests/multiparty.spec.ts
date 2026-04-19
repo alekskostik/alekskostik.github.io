@@ -4,7 +4,7 @@ import { switchUser, loadDemo, goTo, submitBid, finishAuction, signContract, act
 test.describe('Несколько участников', () => {
 
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
+    await page.goto('');
     await page.waitForSelector('.user-btn', { state: 'visible' });
     await loadDemo(page);
   });

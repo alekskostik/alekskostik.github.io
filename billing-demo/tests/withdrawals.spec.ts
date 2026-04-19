@@ -4,7 +4,7 @@ import { switchUser, loadDemo, goTo, topUpService, topUpDeposit, open1C, confirm
 test.describe('Пополнение и вывод', () => {
 
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
+    await page.goto('');
     await page.waitForSelector('.user-btn', { state: 'visible' });
     await loadDemo(page);
   });

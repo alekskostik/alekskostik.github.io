@@ -4,7 +4,7 @@ import { switchUser, loadDemo, goTo, submitBid, finishAuction, active } from './
 test.describe('Задатки', () => {
 
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
+    await page.goto('');
     await page.waitForSelector('.user-btn', { state: 'visible' });
     await loadDemo(page);
   });

@@ -4,7 +4,7 @@ import { switchUser, loadDemo, goTo, open1C, confirm1C, closeModal, active } fro
 test.describe('БР: оплата услуг', () => {
 
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
+    await page.goto('');
     await page.waitForSelector('.user-btn', { state: 'visible' });
     await loadDemo(page);
     await switchUser(page, 'БР 1');
