@@ -18,9 +18,10 @@ document.addEventListener('alpine:init', () => {
     sync1cFilter:'all', debtThresholdDays:0,
     prcName:'', prcInn:'', prcKpp:'', prcBank:'', prcBik:'', prcAccNum:'', prcError:'', prcLoading:false,
     actInvoiceId:null,
+    brServiceId:null, brPayRid:'',
 
     CDT_NAME:'АО «Центр дистанционных торгов»', CDT_INN_KPP:'7812345678 / 780101001',
-    CDT_BANK:'АО «Тинькофф Банк»', CDT_BIK:'044525974', CDT_RS:'40702810000001234567',
+    CDT_BANK:'АО «Т-Банк»', CDT_BIK:'044525974', CDT_RS:'40702810000001234567',
 
     init() { applyTheme(this.theme); this.$nextTick(()=>this.checkExpiredAllocations()); },
 
@@ -271,7 +272,7 @@ document.addEventListener('alpine:init', () => {
       // Создаём заявку в invoices
       this.db.invoices.unshift({
         invoiceId:genId('INV'), accountId:acc.accountId,
-        type:'пополнение', status:'создано',
+        type:'пополнение', status:'создано', sourceType:'internal', isActive:true, amountPaid:null,
         amount:svc.price, requestId:this.brPayRid,
         createdAt:new Date().toISOString(),
         description:'Оплата услуги: '+svc.name
@@ -323,14 +324,29 @@ document.addEventListener('alpine:init', () => {
     submitFundsService() {
       this.fsError=''; if(!this.fsAmount||parseFloat(this.fsAmount)<=0){this.fsError='Укажите сумму';return;}
       this.fsLoading=true;
-      setTimeout(()=>{ this.fsRid=reqIdGen('P'); this.db.invoices.unshift({invoiceId:genId('INV'),accountId:this.fsAccId,type:'пополнение',status:'создано',amount:parseFloat(this.fsAmount),requestId:this.fsRid,createdAt:new Date().toISOString(),description:'Пополнение счёта услуг'}); saveDB(this.db); this.fsLoading=false; this.mStep=1; },600);
+      setTimeout(()=>{
+        this.fsRid=reqIdGen('P');
+        const invId=genId('INV');
+        this.db.invoices.unshift({invoiceId:invId,accountId:this.fsAccId,type:'пополнение',status:'создано',sourceType:'internal',isActive:true,amountPaid:null,amount:parseFloat(this.fsAmount),requestId:this.fsRid,createdAt:new Date().toISOString(),description:'Пополнение счёта услуг'});
+        // AccountingRequests
+        if(!this.db.accountingRequests) this.db.accountingRequests=[];
+        this.db.accountingRequests.push({requestId:genId('AR'),externalRequestId:this.fsRid,requestType:'add_funds',endpoint:'POST /invoices',status:'pending',attemptCount:1,lastAttemptAt:new Date().toISOString(),resolvedAt:null,relatedEntityType:'invoice',relatedEntityId:invId,createdAt:new Date().toISOString()});
+        saveDB(this.db); this.fsLoading=false; this.mStep=1;
+      },600);
     },
 
     // ── ПОПОЛНЕНИЕ ЗАДАТКА ──
     submitFundsDeposit() {
       this.fdError=''; if(!this.fdAmount||parseFloat(this.fdAmount)<=0){this.fdError='Укажите сумму';return;}
       this.fdLoading=true;
-      setTimeout(()=>{ this.fdRid=reqIdGen('P'); this.db.invoices.unshift({invoiceId:genId('INV'),accountId:this.fdAccId,type:'пополнение',status:'создано',amount:parseFloat(this.fdAmount),requestId:this.fdRid,createdAt:new Date().toISOString(),description:'Пополнение задаткового счёта'+(this.fdTrade?' (торги '+this.fdTrade+')':'')}); saveDB(this.db); this.fdLoading=false; this.mStep=1; },600);
+      setTimeout(()=>{
+        this.fdRid=reqIdGen('P');
+        const invId=genId('INV');
+        this.db.invoices.unshift({invoiceId:invId,accountId:this.fdAccId,type:'пополнение',status:'создано',sourceType:'internal',isActive:true,amountPaid:null,amount:parseFloat(this.fdAmount),requestId:this.fdRid,createdAt:new Date().toISOString(),description:'Пополнение задаткового счёта'+(this.fdTrade?' (торги '+this.fdTrade+')':'')});
+        if(!this.db.accountingRequests) this.db.accountingRequests=[];
+        this.db.accountingRequests.push({requestId:genId('AR'),externalRequestId:this.fdRid,requestType:'add_funds',endpoint:'POST /invoices',status:'pending',attemptCount:1,lastAttemptAt:new Date().toISOString(),resolvedAt:null,relatedEntityType:'invoice',relatedEntityId:invId,createdAt:new Date().toISOString()});
+        saveDB(this.db); this.fdLoading=false; this.mStep=1;
+      },600);
     },
 
     // ── ВЫВОД ──
@@ -341,11 +357,17 @@ document.addEventListener('alpine:init', () => {
       if(acc.balanceFree<amt){this.wdError='Недостаточно свободных средств. Доступно: '+fmt(acc.balanceFree);return;}
       this.wdLoading=true;
       setTimeout(()=>{
+        const balBefore=acc.balanceFree+acc.balanceReserved+(acc.balanceVirtual||0);
         acc.balanceFree-=amt; acc.balanceReserved+=amt;
         this.wdRid=reqIdGen('W');
         const desc=acc.subAccountTypeId==='03'?'Вывод средств с задаткового счёта':'Вывод д/с на реквизиты';
-        this.db.invoices.unshift({invoiceId:genId('INV'),accountId:this.wdAccId,type:'вывод',status:'на рассмотрении',amount:amt,requestId:this.wdRid,createdAt:new Date().toISOString(),description:desc});
-        this.db.transactions.unshift({txId:genId('TX'),accountId:this.wdAccId,type:'вывод',status:'в обработке',amount:-amt,createdAt:new Date().toISOString(),description:desc,requestId:this.wdRid});
+        const invId=genId('INV'); const now=new Date().toISOString();
+        this.db.invoices.unshift({invoiceId:invId,accountId:this.wdAccId,type:'вывод',status:'на рассмотрении',sourceType:'internal',isActive:true,amountPaid:null,amount:amt,requestId:this.wdRid,createdAt:now,description:desc});
+        this.db.transactions.unshift({txId:genId('TX'),accountId:this.wdAccId,type:'вывод',status:'в обработке',amount:-amt,balanceBefore:balBefore,balanceAfter:balBefore-amt,actorType:'self',performedByUserId:this.currentUserId,onBehalfOfParticipantId:null,onBehalfOfPrincipalId:null,requestId:this.wdRid,sourceInvoiceId:invId,sourceDepositId:null,createdAt:now,description:desc});
+        if(!this.db.accountingRequests) this.db.accountingRequests=[];
+        this.db.accountingRequests.push({requestId:genId('AR'),externalRequestId:this.wdRid,requestType:'withdrawal',endpoint:'POST /withdrawals',status:'pending',attemptCount:1,lastAttemptAt:now,resolvedAt:null,relatedEntityType:'invoice',relatedEntityId:invId,createdAt:now});
+        if(!this.db.auditLog) this.db.auditLog=[];
+        this.db.auditLog.push({auditId:genId('AL'),eventType:'balance_change',entityType:'transaction',entityId:this.db.transactions[0].txId,actorUserId:this.currentUserId,actorType:'self',payload:{amount:-amt,type:'вывод',accountId:this.wdAccId},createdAt:now});
         saveDB(this.db); this.wdLoading=false; this.mStep=1;
       },500);
     },
@@ -410,7 +432,7 @@ document.addEventListener('alpine:init', () => {
           const restDesc=toDebtor
             ? 'Вывод задатка по торгам '+dep.auctionId+' (должник: '+(auc?.debtorName||'—')+')'
             : 'Вывод задатка на собственные реквизиты ОТ (торги '+dep.auctionId+')';
-          this.db.invoices.unshift({invoiceId:genId('INV'),accountId:acc.accountId,type:'вывод задатка',status:'на рассмотрении',amount:remaining,requestId:this.wdDepRid,createdAt:now,description:restDesc});
+          this.db.invoices.unshift({invoiceId:genId('INV'),accountId:acc.accountId,type:'вывод задатка',status:'на рассмотрении',sourceType:'internal',isActive:true,amountPaid:null,amount:remaining,requestId:this.wdDepRid,createdAt:now,description:restDesc});
           this.db.transactions.unshift({txId:genId('TX'),accountId:acc.accountId,type:'вывод задатка',status:'в обработке',amount:-remaining,createdAt:now,description:restDesc,requestId:this.wdDepRid});
         }
         dep.status='выведен';
@@ -420,7 +442,6 @@ document.addEventListener('alpine:init', () => {
 
 
     // ── ОПЛАТА УСЛУГ ──
-    // Долг по услугам = сумма потраченных виртуальных (фиксируется в транзакции как virtualPart)
     submitPay() {
       const svc=this.currentPayService;
       const acc=this.db.accounts.find(a=>a.accountId===this.servAcc?.accountId);
@@ -428,14 +449,18 @@ document.addEventListener('alpine:init', () => {
       const effective=acc.balanceFree+(acc.balanceVirtual||0);
       if(effective<svc.price){alert('Недостаточно средств (доступно: '+fmt(effective)+')');return;}
       setTimeout(()=>{
+        const balBefore=acc.balanceFree+acc.balanceReserved+(acc.balanceVirtual||0);
         const fromReal=Math.min(acc.balanceFree, svc.price);
         const fromVirt=svc.price-fromReal;
         acc.balanceFree-=fromReal;
         if(fromVirt>0) acc.balanceVirtual=Math.max(0,(acc.balanceVirtual||0)-fromVirt);
-        const rid=reqIdGen('S');
-        this.db.invoices.unshift({invoiceId:genId('INV'),accountId:acc.accountId,type:'оплата услуги',status:'исполнено',amount:svc.price,requestId:rid,createdAt:new Date().toISOString(),description:'Услуга: '+svc.name});
-        // фиксируем virtualPart в транзакции — нужно для расчёта долга
-        this.db.transactions.unshift({txId:genId('TX'),accountId:acc.accountId,type:'оплата услуги',status:'завершена',amount:-svc.price,virtualPart:fromVirt,repaid:false,createdAt:new Date().toISOString(),description:'Услуга: '+svc.name,requestId:rid});
+        const rid=reqIdGen('S'); const now=new Date().toISOString(); const invId=genId('INV');
+        this.db.invoices.unshift({invoiceId:invId,accountId:acc.accountId,type:'оплата услуги',status:'исполнено',sourceType:'internal',isActive:true,amountPaid:svc.price,amount:svc.price,requestId:rid,createdAt:now,description:'Услуга: '+svc.name});
+        this.db.transactions.unshift({txId:genId('TX'),accountId:acc.accountId,type:'оплата услуги',status:'завершена',amount:-svc.price,balanceBefore:balBefore,balanceAfter:balBefore-svc.price,actorType:'self',performedByUserId:this.currentUserId,onBehalfOfParticipantId:null,onBehalfOfPrincipalId:null,virtualPart:fromVirt,repaid:false,requestId:rid,sourceInvoiceId:invId,sourceDepositId:null,createdAt:now,description:'Услуга: '+svc.name});
+        if(!this.db.accountingRequests) this.db.accountingRequests=[];
+        this.db.accountingRequests.push({requestId:genId('AR'),externalRequestId:rid,requestType:'service_payment',endpoint:'POST /service-payments',status:'completed',attemptCount:1,lastAttemptAt:now,resolvedAt:now,relatedEntityType:'invoice',relatedEntityId:invId,createdAt:now});
+        if(!this.db.auditLog) this.db.auditLog=[];
+        this.db.auditLog.push({auditId:genId('AL'),eventType:'balance_change',entityType:'transaction',entityId:this.db.transactions[0].txId,actorUserId:this.currentUserId,actorType:'self',payload:{amount:-svc.price,type:'оплата услуги',accountId:acc.accountId},createdAt:now});
         saveDB(this.db); this.mStep=1;
       },400);
     },
@@ -446,7 +471,7 @@ document.addEventListener('alpine:init', () => {
       const amt=parseFloat(this.trAmount); if(!this.trAmount||isNaN(amt)||amt<=0){this.trError='Укажите сумму';return;}
       const from=this.transferFrom; if(!from||from.balanceFree<amt){this.trError='Недостаточно средств. Доступно: '+fmt(from?.balanceFree||0);return;}
       this.trLoading=true;
-      setTimeout(()=>{ from.balanceFree-=amt; from.balanceReserved+=amt; this.trRid=reqIdGen('T'); this.db.invoices.unshift({invoiceId:genId('INV'),accountId:from.accountId,type:'перевод задаткового на услуги',status:'в обработке',amount:amt,requestId:this.trRid,createdAt:new Date().toISOString(),description:'Перевод с задаткового счёта на счёт услуг'}); this.db.transactions.unshift({txId:genId('TX'),accountId:from.accountId,type:'перевод между субсчетами',status:'в обработке',amount:-amt,createdAt:new Date().toISOString(),description:'Перевод ('+this.trRid+')'}); saveDB(this.db); this.trLoading=false; this.mStep=1; },400);
+      setTimeout(()=>{ from.balanceFree-=amt; from.balanceReserved+=amt; this.trRid=reqIdGen('T'); this.db.invoices.unshift({invoiceId:genId('INV'),accountId:from.accountId,type:'перевод задаткового на услуги',status:'в обработке',sourceType:'internal',isActive:true,amountPaid:null,amount:amt,requestId:this.trRid,createdAt:new Date().toISOString(),description:'Перевод с задаткового счёта на счёт услуг'}); this.db.transactions.unshift({txId:genId('TX'),accountId:from.accountId,type:'перевод между субсчетами',status:'в обработке',amount:-amt,createdAt:new Date().toISOString(),description:'Перевод ('+this.trRid+')'}); saveDB(this.db); this.trLoading=false; this.mStep=1; },400);
     },
 
     // ── РЕКВИЗИТЫ ──
@@ -478,13 +503,27 @@ document.addEventListener('alpine:init', () => {
         const fromRealDep=Math.min(depAcc.balanceFree, amt);
         const fromVirtDep=amt-fromRealDep;
         const virtInDeposit=fromVirtDep;
+        const balBefore=depAcc.balanceFree+depAcc.balanceReserved+(depAcc.balanceVirtual||0);
         depAcc.balanceFree-=fromRealDep;
         if(fromVirtDep>0) depAcc.balanceVirtual=Math.max(0,(depAcc.balanceVirtual||0)-fromVirtDep);
         depAcc.balanceReserved+=amt;
+        const now=new Date().toISOString();
         const depId=genId('DEP'); const otDepAcc=this.db.accounts.find(a=>a.userId===auc.organizerId&&a.subAccountTypeId==='04');
-        this.db.deposits.unshift({depositId:depId,payerAccountId:depAcc.accountId,receiverAccountId:otDepAcc?.accountId||null,auctionId:auc.auctionId,tradeLotId:auc.lotId,amount:amt,virtualAmount:virtInDeposit,status:'зарезервирован',reservedAt:new Date().toISOString(),releasedAt:null,releaseAfter:null,holdUntilContract:false,payer:this.currentUser.name,allowedWithdrawalType:'none'});
-        this.db.transactions.unshift({txId:genId('TX'),accountId:depAcc.accountId,type:'резервирование задатка',status:'завершена',amount:-amt,createdAt:new Date().toISOString(),description:'Задаток по торгам '+auc.auctionId+(virtInDeposit>0?' (вкл. '+fmt(virtInDeposit)+' вирт.)':'')});
-        this.db.tradeApplications.unshift({appId:genId('APP'),auctionId:auc.auctionId,bidderId:this.currentUserId,depositId:depId,amount:amt,virtualAmount:virtInDeposit,status:'принята',createdAt:new Date().toISOString()});
+        this.db.deposits.unshift({depositId:depId,payerAccountId:depAcc.accountId,receiverAccountId:otDepAcc?.accountId||null,auctionId:auc.auctionId,tradeLotId:auc.lotId,amount:amt,virtualAmount:virtInDeposit,status:'зарезервирован',reservedAt:now,releasedAt:null,releaseAfter:null,holdUntilContract:false,payer:this.currentUser.name,allowedWithdrawalType:'none',debtorInn:auc.debtorReq?.inn||null,principalId:null});
+        // FundAllocations: исходная запись add_funds → split, дочерняя deposit_ut
+        const existingAlloc=(this.db.fundAllocations||[]).find(a=>a.accountId===depAcc.accountId&&a.fundSourceType==='add_funds'&&a.status==='active'&&a.amount>=amt);
+        if(existingAlloc){
+          existingAlloc.status='split';
+          const remainder=existingAlloc.amount-amt;
+          this.db.fundAllocations.push({allocId:genId('FA'),parentAllocationId:existingAlloc.allocId,accountId:depAcc.accountId,amount:amt,fundSourceType:'deposit_ut',sourceEntityId:depId,sourceTransactionId:null,allowedWithdrawalType:'none',auctionId:auc.auctionId,debtorInn:auc.debtorReq?.inn||null,status:'active',expiresAt:null,createdAt:now});
+          if(remainder>0) this.db.fundAllocations.push({allocId:genId('FA'),parentAllocationId:existingAlloc.allocId,accountId:depAcc.accountId,amount:remainder,fundSourceType:'add_funds',sourceEntityId:null,sourceTransactionId:null,allowedWithdrawalType:'own',auctionId:null,debtorInn:null,status:'active',expiresAt:null,createdAt:now});
+        }
+        const txId=genId('TX');
+        this.db.transactions.unshift({txId,accountId:depAcc.accountId,type:'резервирование задатка',status:'завершена',amount:-amt,balanceBefore:balBefore,balanceAfter:balBefore-amt,actorType:'self',performedByUserId:this.currentUserId,onBehalfOfParticipantId:null,onBehalfOfPrincipalId:null,requestId:null,sourceDepositId:depId,createdAt:now,description:'Задаток по торгам '+auc.auctionId+(virtInDeposit>0?' (вкл. '+fmt(virtInDeposit)+' вирт.)':'')});
+        this.db.tradeApplications.unshift({appId:genId('APP'),auctionId:auc.auctionId,bidderId:this.currentUserId,depositId:depId,amount:amt,virtualAmount:virtInDeposit,status:'принята',createdAt:now});
+        // AuditLog
+        if(!this.db.auditLog) this.db.auditLog=[];
+        this.db.auditLog.push({auditId:genId('AL'),eventType:'deposit_reserved',entityType:'deposit',entityId:depId,actorUserId:this.currentUserId,actorType:'self',payload:{amount:amt,auctionId:auc.auctionId,accountId:depAcc.accountId},createdAt:now});
         saveDB(this.db); this.appLoading=false; this.mStep=1;
       },600);
     },
@@ -663,15 +702,15 @@ document.addEventListener('alpine:init', () => {
 
     checkExpiredAllocations() {
       const now=new Date();
-      const expired=(this.db.virtualAllocations||[]).filter(a=>a.status==='active'&&new Date(a.expiresAt)<now);
+      const expired=(this.db.fundAllocations||[]).filter(a=>a.fundSourceType==='virtual'&&a.status==='active'&&new Date(a.expiresAt)<now);
       expired.forEach(a=>this._annulAlloc(a));
       if(expired.length>0) saveDB(this.db);
       return expired.length;
     },
     adminAnnulAlloc(allocId) {
-      const alloc=(this.db.virtualAllocations||[]).find(a=>a.allocId===allocId);
+      const alloc=(this.db.fundAllocations||[]).find(a=>a.allocId===allocId);
       if(!alloc||alloc.status!=='active') return;
-      if(!confirm('Аннулировать виртуальное начисление '+fmt(alloc.originalAmount)+'?')) return;
+      if(!confirm('Аннулировать виртуальное начисление '+fmt(alloc.originalAmount||alloc.amount)+'?')) return;
       this._annulAlloc(alloc);
     },
 
@@ -683,15 +722,29 @@ document.addEventListener('alpine:init', () => {
       const acc=this.db.accounts.find(a=>a.accountId===this.admVirtualAccId);
       if(!acc){this.admVirtualError='Счёт не найден';return;}
       acc.balanceVirtual=(acc.balanceVirtual||0)+amt;
-      if(!this.db.virtualAllocations) this.db.virtualAllocations=[];
+      if(!this.db.fundAllocations) this.db.fundAllocations=[];
       const expiresAt=this.admVirtualExpiry ? new Date(this.admVirtualExpiry).toISOString() : new Date(Date.now()+30*24*60*60*1000).toISOString();
-      this.db.virtualAllocations.push({allocId:genId('VA'),accountId:this.admVirtualAccId,originalAmount:amt,repaidAmount:0,status:'active',expiresAt,createdAt:new Date().toISOString(),description:(this.admVirtualDesc||'Начисление виртуальных средств (адм.)')});
-      this.db.transactions.unshift({txId:genId('TX'),accountId:this.admVirtualAccId,type:'начисление виртуальных средств',status:'завершена',amount:amt,createdAt:new Date().toISOString(),description:(this.admVirtualDesc||'Начисление виртуальных средств (адм.)')});
+      const now=new Date().toISOString();
+      const allocId=genId('FA');
+      const txId=genId('TX');
+      this.db.fundAllocations.push({
+        allocId, parentAllocationId:null, accountId:this.admVirtualAccId,
+        amount:amt, fundSourceType:'virtual',
+        sourceEntityId:null, sourceTransactionId:txId,
+        allowedWithdrawalType:'none', auctionId:null, debtorInn:null,
+        status:'active', expiresAt, createdAt:now,
+        originalAmount:amt, repaidAmount:0,
+        description:(this.admVirtualDesc||'Начисление виртуальных средств (адм.)'),
+      });
+      this.db.transactions.unshift({txId, accountId:this.admVirtualAccId, type:'начисление виртуальных средств', status:'завершена', amount:amt, balanceBefore:acc.balanceVirtual-amt, balanceAfter:acc.balanceVirtual, actorType:'self', performedByUserId:this.currentUserId, onBehalfOfParticipantId:null, onBehalfOfPrincipalId:null, createdAt:now, description:(this.admVirtualDesc||'Начисление виртуальных средств (адм.)')});
+      if(!this.db.auditLog) this.db.auditLog=[];
+      this.db.auditLog.push({auditId:genId('AL'), eventType:'virtual_credited', entityType:'fund_allocation', entityId:allocId, actorUserId:this.currentUserId, actorType:'self', payload:{amount:amt, accountId:this.admVirtualAccId, expiresAt}, createdAt:now});
+      syncAccountBalances(this.db);
       saveDB(this.db); this.closeModal();
     },
 
     // ── ADMIN ──
-    adminToggleBlock(accountId) { const acc=this.db.accounts.find(a=>a.accountId===accountId); if(!acc) return; if(!confirm((acc.isBlocked?'Разблокировать':'Заблокировать')+' счёт '+acc.displayNumber+'?'))return; acc.isBlocked=!acc.isBlocked; saveDB(this.db); },
+    adminToggleBlock(accountId) { const acc=this.db.accounts.find(a=>a.accountId===accountId); if(!acc) return; if(!confirm((acc.isBlocked?'Разблокировать':'Заблокировать')+' счёт '+acc.displayNumber+'?'))return; acc.isBlocked=!acc.isBlocked; acc.accountStatusId=acc.isBlocked?'blocked':'active'; acc.blockReason=acc.isBlocked?'Административная блокировка':null; acc.updatedAt=new Date().toISOString(); if(!this.db.auditLog)this.db.auditLog=[]; this.db.auditLog.push({auditId:genId('AL'),eventType:acc.isBlocked?'account_blocked':'account_unblocked',entityType:'account',entityId:accountId,actorUserId:this.currentUserId,actorType:'self',payload:{isBlocked:acc.isBlocked},createdAt:new Date().toISOString()}); saveDB(this.db); },
     adminReleaseDeposit(depositId) { const dep=this.db.deposits.find(d=>d.depositId===depositId); if(!dep) return; if(!confirm('Принудительно снять резерв задатка '+fmt(dep.amount)+'?'))return; this._releaseDeposit(dep); saveDB(this.db); },
     adminVerifyReq(reqId) { const req=this.db.requisites.find(r=>r.requisiteId===reqId); if(!req) return; req.isVerified=true; saveDB(this.db); },
     adminVerifyPrc(prcId) { const p=this.db.principals?.find(p=>p.principalId===prcId); if(!p) return; p.isVerified=true; saveDB(this.db); },
@@ -734,16 +787,21 @@ document.addEventListener('alpine:init', () => {
             // balanceVirtual уже был уменьшен при расходовании, здесь не меняем
             this.db.transactions.unshift({txId:genId('TX'),accountId:inv.accountId,type:'погашение виртуальных д/с',status:'завершена',amount:-toRepay,createdAt:now,description:'Погашение виртуальных д/с ('+fmt(toRepay)+')'});
           }
-          this.db.transactions.unshift({txId:genId('TX'),accountId:inv.accountId,type:'пополнение',status:'завершена',amount:inv.amount,createdAt:now,description:inv.description+' (подтверждено)',requestId:inv.requestId});
+          this.db.transactions.unshift({txId:genId('TX'),accountId:inv.accountId,type:'пополнение',status:'завершена',amount:inv.amount,balanceBefore:acc.balanceFree-toFree,balanceAfter:acc.balanceFree,actorType:'system',performedByUserId:null,onBehalfOfParticipantId:null,onBehalfOfPrincipalId:null,requestId:inv.requestId,sourceInvoiceId:inv.invoiceId,sourceDepositId:null,createdAt:now,description:inv.description+' (подтверждено)'});
+          // FundAllocations: создаём запись add_funds на зачисленную сумму
+          if(!this.db.fundAllocations) this.db.fundAllocations=[];
+          const txIdNew=this.db.transactions[0].txId;
+          this.db.fundAllocations.push({allocId:genId('FA'),parentAllocationId:null,accountId:inv.accountId,amount:toFree,fundSourceType:'add_funds',sourceEntityId:inv.invoiceId,sourceTransactionId:txIdNew,allowedWithdrawalType:'own',auctionId:null,debtorInn:null,status:'active',expiresAt:null,createdAt:now});
           // для БР: после подтверждения пополнения создаём запись об оплате услуги
           if(inv.description&&inv.description.startsWith('Оплата услуги:')){
             const svcName=inv.description.replace('Оплата услуги: ','');
             const svc=SERVICES.find(s=>s.name===svcName);
             if(svc){
               const svcRid=reqIdGen('S');
-              this.db.invoices.push({invoiceId:genId('INV'),accountId:inv.accountId,type:'оплата услуги',status:'исполнено',amount:inv.amount,requestId:svcRid,createdAt:now,description:'Услуга: '+svcName});
-              // транзакция для истории операций БР
-              this.db.transactions.unshift({txId:genId('TX'),accountId:inv.accountId,type:'оплата услуги',status:'завершена',amount:-inv.amount,virtualPart:0,repaid:false,createdAt:now,description:'Услуга: '+svcName,requestId:svcRid});
+              const balBeforeSvc=acc.balanceFree+acc.balanceReserved+(acc.balanceVirtual||0);
+              acc.balanceFree=Math.max(0, acc.balanceFree-inv.amount); // списываем стоимость услуги
+              this.db.invoices.push({invoiceId:genId('INV'),accountId:inv.accountId,type:'оплата услуги',status:'исполнено',sourceType:'internal',isActive:true,amountPaid:inv.amount,amount:inv.amount,requestId:svcRid,createdAt:now,description:'Услуга: '+svcName});
+              this.db.transactions.unshift({txId:genId('TX'),accountId:inv.accountId,type:'оплата услуги',status:'завершена',amount:-inv.amount,balanceBefore:balBeforeSvc,balanceAfter:balBeforeSvc-inv.amount,actorType:'system',performedByUserId:null,onBehalfOfParticipantId:null,onBehalfOfPrincipalId:null,virtualPart:0,repaid:false,requestId:svcRid,sourceInvoiceId:null,sourceDepositId:null,createdAt:now,description:'Услуга: '+svcName});
             }
           }
         }
@@ -759,6 +817,18 @@ document.addEventListener('alpine:init', () => {
       // DocRequests: помечаем pending запрос для этого invoice как ready
       const dr=(this.db.docRequests||[]).find(r=>r.refId===inv.invoiceId&&r.status==='pending');
       if(dr){ dr.status='ready'; dr.issuedAt=now; }
+      // AccountingRequests: обновляем статус запроса
+      if(!this.db.accountingRequests) this.db.accountingRequests=[];
+      const ar=this.db.accountingRequests.find(r=>r.externalRequestId===inv.requestId&&r.status==='pending');
+      if(ar){ ar.status='completed'; ar.resolvedAt=now; }
+      // AuditLog
+      if(!this.db.auditLog) this.db.auditLog=[];
+      this.db.auditLog.push({auditId:genId('AL'),eventType:'invoice_status_changed',entityType:'invoice',entityId:inv.invoiceId,actorUserId:this.currentUserId,actorType:'system',payload:{status:'исполнено',type:inv.type,amount:inv.amount},createdAt:now});
+      // SyncState: обновляем метку синхронизации для statuses
+      if(this.db.syncState){
+        const ss=this.db.syncState.find(s=>s.endpointType==='statuses');
+        if(ss){ ss.lastSyncAt=now; ss.updatedAt=now; }
+      }
       saveDB(this.db);
     },
     // выставление счёта за торги через 1С
@@ -767,7 +837,19 @@ document.addEventListener('alpine:init', () => {
       if(!inv) return;
       const amt=parseFloat(amount);
       if(!amt||amt<=0){alert('Укажите сумму');return;}
-      inv.amount=amt; inv.status='выставлен'; inv.issuedAt=new Date().toISOString();
+      const now=new Date().toISOString();
+      inv.amount=amt; inv.status='выставлен'; inv.issuedAt=now; inv.sourceType='external'; inv.amountPaid=0;
+      // AccountingRequests
+      if(!this.db.accountingRequests) this.db.accountingRequests=[];
+      this.db.accountingRequests.push({requestId:genId('AR'),externalRequestId:inv.requestId,requestType:'invoices_poll',endpoint:'GET /invoices?since=',status:'completed',attemptCount:1,lastAttemptAt:now,resolvedAt:now,relatedEntityType:'invoice',relatedEntityId:invId,createdAt:now});
+      // AuditLog
+      if(!this.db.auditLog) this.db.auditLog=[];
+      this.db.auditLog.push({auditId:genId('AL'),eventType:'invoice_status_changed',entityType:'invoice',entityId:invId,actorUserId:this.currentUserId,actorType:'system',payload:{status:'выставлен',amount:amt,type:'trade_invoice'},createdAt:now});
+      // SyncState: обновляем метку для invoices
+      if(this.db.syncState){
+        const ss=this.db.syncState.find(s=>s.endpointType==='invoices');
+        if(ss){ ss.lastSyncAt=now; ss.updatedAt=now; }
+      }
       saveDB(this.db);
     },
 
@@ -781,7 +863,6 @@ document.addEventListener('alpine:init', () => {
     reject1C(invoiceId, reason) {
       const inv=this.db.invoices.find(i=>i.invoiceId===invoiceId); if(!inv) return;
       const now=new Date().toISOString();
-      // для выставленных счетов — статус 'отменён', для заявок — 'отклонено'
       inv.status=(inv.status==='выставлен')?'отменён':'отклонено';
       inv.completedAt=now;
       if(reason) inv.cancelReason=reason;
@@ -790,6 +871,18 @@ document.addEventListener('alpine:init', () => {
         if(acc){acc.balanceReserved=Math.max(0,acc.balanceReserved-inv.amount);acc.balanceFree+=inv.amount;}
         const wdTx=this.db.transactions.find(t=>t.requestId===inv.requestId);
         if(wdTx){ wdTx.status='отменена'; wdTx.completedAt=now; }
+      }
+      // AccountingRequests: обновляем статус
+      if(!this.db.accountingRequests) this.db.accountingRequests=[];
+      const arR=this.db.accountingRequests.find(r=>r.externalRequestId===inv.requestId&&r.status==='pending');
+      if(arR){ arR.status='failed'; arR.resolvedAt=now; }
+      // AuditLog
+      if(!this.db.auditLog) this.db.auditLog=[];
+      this.db.auditLog.push({auditId:genId('AL'),eventType:'invoice_status_changed',entityType:'invoice',entityId:inv.invoiceId,actorUserId:this.currentUserId,actorType:'system',payload:{status:inv.status,reason:reason||null,type:inv.type},createdAt:now});
+      // SyncState
+      if(this.db.syncState){
+        const ss=this.db.syncState.find(s=>s.endpointType==='statuses');
+        if(ss){ ss.lastSyncAt=now; ss.updatedAt=now; }
       }
       saveDB(this.db);
     },

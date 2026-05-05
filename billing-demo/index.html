@@ -118,6 +118,7 @@
         <div class="ni" :class="{active:page==='adminPrincipals'}"     @click="setPage('adminPrincipals')"><span class="ni-ico">👤</span> Принципалы</div>
         <div class="ni" :class="{active:page==='adminAuctions'}"  @click="setPage('adminAuctions')"><span class="ni-ico">⚖</span> Все торги</div>
         <div class="ni" :class="{active:page==='adminTxs'}"       @click="setPage('adminTxs')"><span class="ni-ico">📊</span> Движение средств</div>
+        <div class="ni" :class="{active:page==='adminModel'}"     @click="setPage('adminModel')"><span class="ni-ico">🗄</span> Модель данных</div>
       </div>
     </template>
   </nav>
@@ -170,9 +171,9 @@
             <template x-if="acc.balanceVirtual>0">
               <span style="font-size:14px;color:var(--green-dk);font-weight:500;margin-left:6px" title="Доступный кредитный лимит (виртуальные средства)">
                 + <span x-text="fmt(acc.balanceVirtual)"></span> вирт.
-                <template x-if="(db.virtualAllocations||[]).filter(a=>a.accountId===acc.accountId&&a.status==='active').length>0">
+                <template x-if="(db.fundAllocations||[]).filter(a=>a.accountId===acc.accountId&&a.fundSourceType==='virtual'&&a.status==='active').length>0">
                   <span style="font-size:10px;font-weight:400;color:var(--green-dk);opacity:.8">
-                    · до <span x-text="fmtDt((db.virtualAllocations||[]).filter(a=>a.accountId===acc.accountId&&a.status==='active').sort((a,b)=>new Date(a.expiresAt)-new Date(b.expiresAt))[0]?.expiresAt||'')" ></span>
+                    · до <span x-text="fmtDt((db.fundAllocations||[]).filter(a=>a.accountId===acc.accountId&&a.fundSourceType==='virtual'&&a.status==='active').sort((a,b)=>new Date(a.expiresAt)-new Date(b.expiresAt))[0]?.expiresAt||'')"></span>
                   </span>
                 </template>
               </span>
@@ -203,8 +204,8 @@
           <template x-if="_virtDebtForAcc(acc.accountId)>0">
             <div class="acc-sub" style="color:var(--amber)">
               Виртуальный долг: <b x-text="fmt(_virtDebtForAcc(acc.accountId))"></b>
-              <template x-if="(db.virtualAllocations||[]).filter(a=>a.accountId===acc.accountId&&a.status==='active').length>0">
-                · до <span x-text="fmtDt((db.virtualAllocations||[]).filter(a=>a.accountId===acc.accountId&&a.status==='active').sort((a,b)=>new Date(a.expiresAt)-new Date(b.expiresAt))[0]?.expiresAt||'')" style="font-size:10px"></span>
+              <template x-if="(db.fundAllocations||[]).filter(a=>a.accountId===acc.accountId&&a.fundSourceType==='virtual'&&a.status==='active').length>0">
+                · до <span x-text="fmtDt((db.fundAllocations||[]).filter(a=>a.accountId===acc.accountId&&a.fundSourceType==='virtual'&&a.status==='active').sort((a,b)=>new Date(a.expiresAt)-new Date(b.expiresAt))[0]?.expiresAt||'')" style="font-size:10px"></span>
               </template>
             </div>
           </template>
@@ -833,15 +834,15 @@
             <td :class="acc.balanceFree>0?'tx-plus':''" x-text="fmt(acc.balanceFree)"></td>
             <td :class="acc.balanceReserved>0?'tx-res':''" x-text="fmt(acc.balanceReserved)"></td>
             <td>
-              <template x-if="(db.virtualAllocations||[]).filter(a=>a.accountId===acc.accountId&&a.status==='active').length===0">
+              <template x-if="(db.fundAllocations||[]).filter(a=>a.accountId===acc.accountId&&a.fundSourceType==='virtual'&&a.status==='active').length===0">
                 <span style="color:var(--text3)">—</span>
               </template>
-              <template x-for="alloc in (db.virtualAllocations||[]).filter(a=>a.accountId===acc.accountId&&a.status==='active')" :key="alloc.allocId">
+              <template x-for="alloc in (db.fundAllocations||[]).filter(a=>a.accountId===acc.accountId&&a.fundSourceType==='virtual'&&a.status==='active')" :key="alloc.allocId">
                 <div style="font-size:10px;margin-bottom:3px;background:var(--amber-lt);padding:3px 7px;border-radius:4px">
                   <div style="display:flex;align-items:center;gap:4px">
-                    <span style="color:var(--amber);font-weight:600" x-text="fmt(alloc.originalAmount)"></span>
+                    <span style="color:var(--amber);font-weight:600" x-text="fmt(alloc.originalAmount||alloc.amount)"></span>
                     <span style="color:var(--text3)">исх.</span>
-                    <template x-if="acc.balanceVirtual<alloc.originalAmount">
+                    <template x-if="acc.balanceVirtual<(alloc.originalAmount||alloc.amount)">
                       <span style="color:var(--text2)">/ <span x-text="fmt(acc.balanceVirtual)"></span> своб.</span>
                     </template>
                     <button style="margin-left:auto;font-size:9px;border:none;background:none;color:var(--red);cursor:pointer;padding:0" @click="adminAnnulAlloc(alloc.allocId)" title="Аннулировать">✕</button>
@@ -987,60 +988,107 @@
 
   <!-- ADMIN: Модель данных -->
   <section class="pg" :class="{active:page==='adminModel'&&isAdmin}">
-    <div class="ptitle">Модель данных (разработка)</div>
-    <div class="panel-warn">Просмотр текущего состояния таблиц БД биллинга. Только для разработки.</div>
+    <div class="ptitle">Модель данных</div>
+    <div class="panel-warn">Просмотр текущего состояния таблиц БД биллинга. Только для разработки и отладки.</div>
 
     <div x-data="{
       selectedTable: 'accounts',
+      schemas: {
+        accounts:          ['accountId','userId','participantId','subAccountTypeId','label','displayNumber','accountStatusId','isBlocked','blockReason','createdAt','updatedAt'],
+        accountBalances:   ['balanceId','accountId','balanceFree','balanceReserved','balanceVirtual','balanceTotal','updatedAt'],
+        transactions:      ['txId','accountId','type','status','amount','balanceBefore','balanceAfter','actorType','performedByUserId','onBehalfOfParticipantId','onBehalfOfPrincipalId','requestId','description','createdAt'],
+        fundAllocations:   ['allocId','parentAllocationId','accountId','amount','fundSourceType','sourceEntityId','sourceTransactionId','allowedWithdrawalType','auctionId','debtorInn','status','expiresAt','createdAt'],
+        deposits:          ['depositId','payerAccountId','receiverAccountId','status','auctionId','tradeLotId','amount','virtualAmount','payer','debtorInn','principalId','reservedAt','releasedAt','holdUntilContract','createdAt'],
+        invoices:          ['invoiceId','sourceType','accountId','type','status','isActive','amount','amountPaid','requestId','externalId','billingRequestId','description','createdAt','processedAt'],
+        docRequests:       ['docRequestId','accountId','requestId','type','status','requestedAt','issuedAt','description'],
+        accountingRequests:['requestId','externalRequestId','requestType','endpoint','status','attemptCount','lastAttemptAt','resolvedAt','relatedEntityType','relatedEntityId','createdAt'],
+        requisites:        ['requisiteId','accountId','principalId','isDefault','bankName','bik','corAccount','accountNumber','inn','kpp','fullName','isVerified','createdAt'],
+        principals:        ['principalId','agentAccountId','userId','fullName','inn','entityType','phone','registrationAddressId','isVerified','createdAt'],
+        tradeApplications: ['appId','auctionId','bidderId','depositId','amount','virtualAmount','status','createdAt'],
+        auctions:          ['auctionId','organizerId','title','lotId','minDeposit','startPrice','debtorName','status','deadline','protocolSignedAt','contractSignedWith'],
+        auditLog:          ['auditId','eventType','entityType','entityId','actorUserId','actorType','createdAt'],
+        syncState:         ['syncStateId','accountingSystem','endpointType','lastSyncAt','updatedAt'],
+      },
       tables: [
-        {id:'accounts',       label:'Accounts (субсчета)'},
-        {id:'invoices',       label:'Invoices (заявки и счета)'},
-        {id:'transactions',   label:'Transactions (операции)'},
-        {id:'deposits',       label:'Deposits (задатки)'},
-        {id:'tradeApplications', label:'TradeApplications (заявки на торги)'},
-        {id:'auctions',       label:'Auctions (торги)'},
-        {id:'virtualAllocations', label:'VirtualAllocations (виртуальные)'},
-        {id:'docRequests',    label:'DocRequests (запросы актов)'},
-        {id:'requisites',     label:'Requisites (реквизиты)'},
-        {id:'principals',     label:'Principals (принципалы)'},
+        {id:'accounts',           label:'Accounts',           desc:'Виртуальные счета (п.3.2.1)'},
+        {id:'accountBalances',    label:'AccountBalances',    desc:'Кэш балансов (п.3.2.2)'},
+        {id:'transactions',       label:'Transactions',       desc:'Транзакции (п.3.2.3)'},
+        {id:'fundAllocations',    label:'FundAllocations',    desc:'Резервы средств (п.3.2.4)'},
+        {id:'deposits',           label:'Deposits',           desc:'Задатки (п.3.2.5)'},
+        {id:'invoices',           label:'Invoices',           desc:'Заявки и счета (п.3.2.6)'},
+        {id:'docRequests',        label:'DocumentRequests',   desc:'Запросы документов (п.3.2.7)'},
+        {id:'accountingRequests', label:'AccountingRequests', desc:'Журнал запросов к 1С (п.3.2.8)'},
+        {id:'requisites',         label:'BankRequisites',     desc:'Банковские реквизиты (п.3.2.9)'},
+        {id:'principals',         label:'Principals',         desc:'Реестр принципалов (п.3.2.11)'},
+        {id:'auditLog',           label:'AuditLog',           desc:'Журнал аудита (п.3.2.12)'},
+        {id:'syncState',          label:'SyncState',          desc:'Состояние синхронизации (п.3.2.13)'},
+        {id:'tradeApplications',  label:'TradeApplications',  desc:'Заявки на торги'},
+        {id:'auctions',           label:'Auctions',           desc:'Торги'},
       ],
       get rows() {
-        if(this.selectedTable==='accounts') return $store?.billing?.db?.accounts||db.accounts||[];
-        const d = (typeof db !== 'undefined' ? db : {});
-        return d[this.selectedTable] || [];
-      }
+        const t=this.selectedTable;
+        if(t==='accountBalances')    return db.accountBalances||[];
+        if(t==='fundAllocations')    return db.fundAllocations||[];
+        if(t==='accountingRequests') return db.accountingRequests||[];
+        if(t==='auditLog')           return db.auditLog||[];
+        if(t==='syncState')          return db.syncState||[];
+        return db[t]||[];
+      },
+      get cols() { return this.schemas[this.selectedTable]||Object.keys((this.rows[0])||{}); },
+      rowCount(t) {
+        if(t==='accountBalances')    return (db.accountBalances||[]).length;
+        if(t==='fundAllocations')    return (db.fundAllocations||[]).length;
+        if(t==='accountingRequests') return (db.accountingRequests||[]).length;
+        if(t==='auditLog')           return (db.auditLog||[]).length;
+        if(t==='syncState')          return (db.syncState||[]).length;
+        return (db[t]||[]).length;
+      },
+      isMoney(col) { return col.startsWith('balance')||col==='amount'||col==='amountPaid'; },
+      isDate(col)  { return col.endsWith('At')||col==='expiresAt'||col==='deadline'; },
+      cellVal(row,col) {
+        const v=row[col];
+        if(v===null||v===undefined) return '—';
+        if(typeof v==='boolean') return v?'true':'false';
+        if(typeof v==='object') return JSON.stringify(v).slice(0,80);
+        if(this.isMoney(col)&&!isNaN(Number(v))&&v!=='') return Number(v).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2});
+        if(this.isDate(col)&&v&&v!=='—') { try{ const d=new Date(v); if(!isNaN(d)) return d.toLocaleDateString('ru-RU')+' '+d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}); }catch(e){} }
+        return String(v);
+      },
     }">
-      <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
-        <label style="font-size:11px;color:var(--text2)">Таблица:</label>
-        <select class="fi" style="font-size:11px;padding:4px 10px;min-width:260px" x-model="selectedTable">
-          <template x-for="t in tables" :key="t.id">
-            <option :value="t.id" x-text="t.label+' ('+((db[t.id]||[]).length)+' записей)'"></option>
-          </template>
-        </select>
-        <span style="font-size:11px;color:var(--text3)" x-text="(db[selectedTable]||[]).length+' записей'"></span>
+      <!-- Кнопки-переключатели таблиц -->
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px">
+        <template x-for="t in tables" :key="t.id">
+          <button class="btn btn-sm" :class="selectedTable===t.id?'btn-p':''" @click="selectedTable=t.id" :title="t.desc">
+            <span x-text="t.label"></span>
+            <span style="margin-left:4px;opacity:.6;font-size:10px" x-text="'('+rowCount(t.id)+')'"></span>
+          </button>
+        </template>
       </div>
-
-      <template x-if="(db[selectedTable]||[]).length===0">
-        <div class="empty">Нет записей</div>
-      </template>
-
-      <template x-if="(db[selectedTable]||[]).length>0">
-        <div style="overflow-x:auto">
-          <table class="admin-table" style="font-size:10px;font-family:var(--mono)">
+      <!-- Заголовок -->
+      <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:8px">
+        <div style="font-size:14px;font-weight:600" x-text="tables.find(t=>t.id===selectedTable)?.label"></div>
+        <div style="font-size:11px;color:var(--text3)" x-text="tables.find(t=>t.id===selectedTable)?.desc"></div>
+        <div style="font-size:11px;color:var(--text2);margin-left:auto" x-text="rows.length+' записей'"></div>
+      </div>
+      <template x-if="rows.length===0"><div class="empty">Нет записей</div></template>
+      <template x-if="rows.length>0">
+        <div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius)">
+          <table class="admin-table" style="font-size:11px;min-width:600px">
             <thead>
               <tr>
-                <template x-for="col in Object.keys((db[selectedTable]||[{}])[0]||{})" :key="col">
-                  <th style="white-space:nowrap;font-size:10px" x-text="col"></th>
+                <template x-for="col in cols" :key="col">
+                  <th style="white-space:nowrap;font-size:10px;font-family:var(--mono);background:var(--bg3)" x-text="col"></th>
                 </template>
               </tr>
             </thead>
             <tbody>
-              <template x-for="(row,idx) in (db[selectedTable]||[])" :key="idx">
+              <template x-for="(row,idx) in rows" :key="idx">
                 <tr>
-                  <template x-for="col in Object.keys(row)" :key="col">
-                    <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
-                      :title="typeof row[col]==='object'?JSON.stringify(row[col]):String(row[col]??'')"
-                      x-text="typeof row[col]==='object'?JSON.stringify(row[col]):(row[col]===null?'null':(row[col]===undefined?'—':String(row[col])))">
+                  <template x-for="col in cols" :key="col">
+                    <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono)"
+                      :style="isMoney(col)&&row[col]!=null?'text-align:right;color:var(--blue)':''"
+                      :title="row[col]===null||row[col]===undefined?'NULL':(typeof row[col]==='object'?JSON.stringify(row[col]):String(row[col]))"
+                      x-text="cellVal(row,col)">
                     </td>
                   </template>
                 </tr>

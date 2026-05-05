@@ -44,3 +44,20 @@ const QR_SVG = `<svg width="110" height="110" viewBox="0 0 110 110" xmlns="http:
   <rect x="45" y="85" width="5" height="5" fill="#185FA5"/><rect x="65" y="85" width="5" height="5" fill="#185FA5"/>
   <rect x="85" y="85" width="5" height="5" fill="#185FA5"/><rect x="95" y="85" width="5" height="5" fill="#185FA5"/>
 </svg>`;
+
+// ── Версия сборки ──
+(function() {
+  const now = new Date();
+  const dd   = String(now.getDate()).padStart(2, '0');
+  const mm   = String(now.getMonth() + 1).padStart(2, '0');
+  const yyyy = now.getFullYear();
+  const BUILD = `${dd}${mm}${yyyy}`;
+  const STORE_VERSION = (typeof STORE_KEY !== 'undefined')
+    ? STORE_KEY.replace('cdt_billing_', '')
+    : 'v?';
+  console.log(
+    `%c ЦДТ Биллинг %c build ${BUILD} · store ${STORE_VERSION} `,
+    'background:#185FA5;color:#fff;font-weight:700;padding:2px 0;border-radius:3px 0 0 3px',
+    'background:#e9ecef;color:#333;padding:2px 4px;border-radius:0 3px 3px 0'
+  );
+})();
