@@ -1,14 +1,29 @@
-const STORE_KEY = 'cdt_billing_v28';
+const STORE_KEY = 'cdt_billing_v29'; // ключ не меняем — добавляем миграцию _v28→29
 
+// Участники ЭТП (Основная БД, DB_bTrade.dbo.Participants)
+const PARTICIPANTS = [
+  { participantId:1, name:'ООО «Тест Трейд»',         inn:'7801234561',   flagJur:true,  roleParticipant:true,  roleOrganizer:false, participantStatusId:'active'  },
+  { participantId:2, name:'Петрова Анна Сергеевна',      inn:'780123456789', flagJur:false, roleParticipant:true,  roleOrganizer:false, participantStatusId:'active'  },
+  { participantId:3, name:'ООО «Новиков»',             inn:'7801234563',   flagJur:true,  roleParticipant:true,  roleOrganizer:false, participantStatusId:'active'  },
+  { participantId:4, name:'ООО «Сидоров и Партнёры»', inn:'7801234564',   flagJur:true,  roleParticipant:false, roleOrganizer:true,  participantStatusId:'active'  },
+  { participantId:5, name:'ООО «Козлова»',             inn:'7801234565',   flagJur:true,  roleParticipant:false, roleOrganizer:true,  participantStatusId:'active'  },
+  { participantId:6, name:'Громов Павел Витальевич',    inn:'780123456896', flagJur:false, roleParticipant:false, roleOrganizer:false, participantStatusId:'pending' },
+  { participantId:7, name:'ООО «Власов и Партнёры»',  inn:'7801234567',   flagJur:true,  roleParticipant:true,  roleOrganizer:true,  participantStatusId:'active'  },
+];
+
+// Пользователи ЭТП (Основная БД, DB_bTrade.dbo.Users)
+// participantId — логическая ссылка на Participants; для счетов 02–04 поиск ведётся по participantId
 const USERS = [
-  { userId:'USR-BR1', name:'Громов Павел',        initials:'ПГ', role:'br',   label:'БР 1'   },
-  { userId:'USR-UT1', name:'Иванов Константин', initials:'КИ', role:'ut',   label:'УТ 1'   },
-  { userId:'USR-UT2', name:'Петрова Анна',       initials:'АП', role:'ut',   label:'УТ 2'   },
-  { userId:'USR-UT3', name:'Новиков Дмитрий',    initials:'ДН', role:'ut',   label:'УТ 3'   },
-  { userId:'USR-OT1', name:'Сидоров Михаил',     initials:'МС', role:'ot',   label:'ОТ 1'   },
-  { userId:'USR-OT2', name:'Козлова Елена',       initials:'ЕК', role:'ot',   label:'ОТ 2'   },
-  { userId:'USR-BO1', name:'Власов Игорь',        initials:'ИВ', role:'both', label:'УТ+ОТ'  },
-  { userId:'USR-ADM', name:'Смирнов Алексей',    initials:'АС', role:'admin', label:'Адм'    },
+  { userId:'USR-BR1', name:'Громов Павел',       initials:'ПГ', role:'br',    label:'БР 1',           participantId:6    },
+  { userId:'USR-UT1', name:'Иванов Константин',  initials:'КИ', role:'ut',    label:'УТ 1',           participantId:1    },
+  { userId:'USR-UT2', name:'Петрова Анна',        initials:'АП', role:'ut',    label:'УТ 2',           participantId:2    },
+  { userId:'USR-UT3', name:'Новиков Дмитрий',     initials:'ДН', role:'ut',    label:'УТ 3',           participantId:3    },
+  { userId:'USR-OT1', name:'Сидоров Михаил',      initials:'МС', role:'ot',    label:'ОТ 1',           participantId:4    },
+  { userId:'USR-OT2', name:'Козлова Елена',        initials:'ЕК', role:'ot',    label:'ОТ 2',           participantId:5    },
+  { userId:'USR-OT3', name:'Романова Светлана',   initials:'СР', role:'ot',    label:'ОТ 3 (Сидоров)', participantId:4    },
+  { userId:'USR-OT4', name:'Андреев Виктор',      initials:'ВА', role:'ot',    label:'ОТ 4 (Сидоров)', participantId:4    },
+  { userId:'USR-BO1', name:'Власов Игорь',         initials:'ИВ', role:'both',  label:'УТ+ОТ',          participantId:7    },
+  { userId:'USR-ADM', name:'Смирнов Алексей',     initials:'АС', role:'admin', label:'Адм',            participantId:null },
 ];
 
 // Типы субсчетов:
@@ -76,22 +91,24 @@ function makeAccount(accountId, userId, participantId, subAccountTypeId, label, 
 function makeAccounts(userId, role, yr, seq, inn) {
   const n = t => `${yr}.0${seq}054.${inn}-${t}`;
   const pid = parseInt(seq, 10);
+  // Типы 02/03/04 принадлежат участнику (pid), не конкретному пользователю → userId=null
+  // Тип 01 — личный счёт БР (userId заполнен, participantId=null)
   if (role === 'ut') return [
-    makeAccount(`ACC-${userId}-02`, userId, pid,  '02', 'Счёт услуг',         n('02')),
-    makeAccount(`ACC-${userId}-03`, userId, pid,  '03', 'Задатковый счёт',    n('03')),
+    makeAccount(`ACC-${userId}-02`, null, pid, '02', 'Счёт услуг',         n('02')),
+    makeAccount(`ACC-${userId}-03`, null, pid, '03', 'Задатковый счёт',    n('03')),
   ];
   if (role === 'ot') return [
-    makeAccount(`ACC-${userId}-02`, userId, pid,  '02', 'Счёт услуг',         n('02')),
-    makeAccount(`ACC-${userId}-04`, userId, pid,  '04', 'Задатковый счёт ОТ', n('04')),
+    makeAccount(`ACC-${userId}-02`, null, pid, '02', 'Счёт услуг',         n('02')),
+    makeAccount(`ACC-${userId}-04`, null, pid, '04', 'Задатковый счёт ОТ', n('04')),
   ];
   if (role === 'br') return [
-    makeAccount(`ACC-${userId}-01`, userId, null, '01', 'Счёт услуг БР',      n('01')),
-    makeAccount(`ACC-${userId}-03`, userId, pid,  '03', 'Задатковый счёт',    n('03')),
+    makeAccount(`ACC-${userId}-01`, userId, null, '01', 'Счёт услуг БР',   n('01')),
+    makeAccount(`ACC-${userId}-03`, null, pid,    '03', 'Задатковый счёт', n('03')),
   ];
   if (role === 'both') return [
-    makeAccount(`ACC-${userId}-02`, userId, pid,  '02', 'Счёт услуг',         n('02')),
-    makeAccount(`ACC-${userId}-03`, userId, pid,  '03', 'Задатковый УТ',      n('03')),
-    makeAccount(`ACC-${userId}-04`, userId, pid,  '04', 'Задатковый ОТ',      n('04')),
+    makeAccount(`ACC-${userId}-02`, null, pid, '02', 'Счёт услуг',     n('02')),
+    makeAccount(`ACC-${userId}-03`, null, pid, '03', 'Задатковый УТ',  n('03')),
+    makeAccount(`ACC-${userId}-04`, null, pid, '04', 'Задатковый ОТ',  n('04')),
   ];
   return [];
 }
@@ -135,7 +152,7 @@ function buildSeed() {
   ];
 
   return {
-    _v: 28,
+    _v: 29,
     currentUserId: 'USR-UT1',
     auctions: buildAuctions(),
     accounts,
@@ -191,10 +208,10 @@ function loadDemoData(db) {
   set('ACC-USR-OT1-02', 56700);
   set('ACC-USR-OT2-02', 30000);
   db.transactions = [
-    { txId:'TX-D1', accountId:'ACC-USR-UT1-03', type:'пополнение', status:'завершена', amount:1500000, balanceBefore:0, balanceAfter:1500000, actorType:'self', performedByUserId:null, onBehalfOfParticipantId:null, onBehalfOfPrincipalId:null, requestId:'P-20260408-000001', createdAt:'2026-04-08T10:00:00Z', description:'Пополнение задаткового счёта' },
-    { txId:'TX-D2', accountId:'ACC-USR-UT2-03', type:'пополнение', status:'завершена', amount:800000,  balanceBefore:0, balanceAfter:800000,  actorType:'self', performedByUserId:null, onBehalfOfParticipantId:null, onBehalfOfPrincipalId:null, requestId:'P-20260409-000001', createdAt:'2026-04-09T10:00:00Z', description:'Пополнение задаткового счёта' },
-    { txId:'TX-D3', accountId:'ACC-USR-UT3-03', type:'пополнение', status:'завершена', amount:600000,  balanceBefore:0, balanceAfter:600000,  actorType:'self', performedByUserId:null, onBehalfOfParticipantId:null, onBehalfOfPrincipalId:null, requestId:'P-20260409-000002', createdAt:'2026-04-09T12:00:00Z', description:'Пополнение задаткового счёта' },
-    { txId:'TX-D4', accountId:'ACC-USR-UT1-02', type:'пополнение', status:'завершена', amount:25000,   balanceBefore:0, balanceAfter:25000,   actorType:'self', performedByUserId:null, onBehalfOfParticipantId:null, onBehalfOfPrincipalId:null, requestId:'P-20260410-000001', createdAt:'2026-04-10T10:00:00Z', description:'Пополнение счёта услуг' },
+    { txId:'TX-D1', accountId:'ACC-USR-UT1-03', type:'пополнение', status:'завершена', amount:1500000, balanceBefore:0, balanceAfter:1500000, actorType:'self', performedByUserId:1002, onBehalfOfParticipantId:null, onBehalfOfPrincipalId:null, requestId:'P-20260408-000001', createdAt:'2026-04-08T10:00:00Z', description:'Пополнение задаткового счёта' },
+    { txId:'TX-D2', accountId:'ACC-USR-UT2-03', type:'пополнение', status:'завершена', amount:800000,  balanceBefore:0, balanceAfter:800000,  actorType:'self', performedByUserId:1003, onBehalfOfParticipantId:null, onBehalfOfPrincipalId:null, requestId:'P-20260409-000001', createdAt:'2026-04-09T10:00:00Z', description:'Пополнение задаткового счёта' },
+    { txId:'TX-D3', accountId:'ACC-USR-UT3-03', type:'пополнение', status:'завершена', amount:600000,  balanceBefore:0, balanceAfter:600000,  actorType:'self', performedByUserId:1004, onBehalfOfParticipantId:null, onBehalfOfPrincipalId:null, requestId:'P-20260409-000002', createdAt:'2026-04-09T12:00:00Z', description:'Пополнение задаткового счёта' },
+    { txId:'TX-D4', accountId:'ACC-USR-UT1-02', type:'пополнение', status:'завершена', amount:25000,   balanceBefore:0, balanceAfter:25000,   actorType:'self', performedByUserId:1002, onBehalfOfParticipantId:null, onBehalfOfPrincipalId:null, requestId:'P-20260410-000001', createdAt:'2026-04-10T10:00:00Z', description:'Пополнение счёта услуг' },
   ];
   db.fundAllocations = [
     { allocId:'FA-D1', parentAllocationId:null, accountId:'ACC-USR-UT1-03', amount:1500000, fundSourceType:'add_funds', sourceEntityId:null, sourceTransactionId:'TX-D1', allowedWithdrawalType:'own', auctionId:null, debtorInn:null, status:'active', expiresAt:null, createdAt:'2026-04-08T10:00:00Z' },
@@ -308,13 +325,32 @@ function migrateV27toV28(db) {
   return db;
 }
 
+// ── Миграция v28 → v29: типы 02-04 → userId=null, participantId заполняется из USERS ──
+function migrateV28toV29(db) {
+  db._v = 29;
+  db.accounts.forEach(a => {
+    if (a.subAccountTypeId !== '01') {
+      if (a.participantId == null && a.userId) {
+        const user = USERS.find(u => u.userId === a.userId);
+        if (user?.participantId != null) a.participantId = user.participantId;
+      }
+      a.userId = null;
+    }
+  });
+  return db;
+}
+
 function loadDB() {
   try {
     const raw = localStorage.getItem(STORE_KEY);
-    if (raw) { const p=JSON.parse(raw); if(p._v===28) return p; }
+    if (raw) {
+      const p=JSON.parse(raw);
+      if(p._v===29) return p;
+      if(p._v===28) { const m=migrateV28toV29(p); saveDB(m); return m; }
+    }
     // попытка мигрировать с v27
     const old = localStorage.getItem('cdt_billing_v27');
-    if (old) { const p=JSON.parse(old); if(p._v===27) { const m=migrateV27toV28(p); saveDB(m); return m; } }
+    if (old) { const p=JSON.parse(old); if(p._v===27) { const m=migrateV28toV29(migrateV27toV28(p)); saveDB(m); return m; } }
   } catch(e) {}
   const db=buildSeed(); saveDB(db); return db;
 }
@@ -324,7 +360,22 @@ function saveDB(db) {
 }
 function resetDB()   { localStorage.removeItem(STORE_KEY); localStorage.removeItem('cdt_billing_v27'); const db=buildSeed(); saveDB(db); return db; }
 
-function accsForUser(db,uid)     { return db.accounts.filter(a=>a.userId===uid); }
+// Целочисленный userIdd (как в ETP DB) по строковому userId биллинга
+function userIddOf(uid) {
+  const i = USERS.findIndex(u => u.userId === uid);
+  return i >= 0 ? 1000 + (i + 1) : null;
+}
+
+function accsForUser(db, uid) {
+  const user = USERS.find(u => u.userId === uid);
+  const pid = user?.participantId;
+  // Тип 01: userId заполнен, participantId=null → ищем по userId
+  // Типы 02–04: userId=null, participantId заполнен → ищем по participantId участника
+  return db.accounts.filter(a =>
+    a.userId === uid ||
+    (pid != null && a.participantId === pid)
+  );
+}
 function txsForUser(db,uid)      { const ids=accsForUser(db,uid).map(a=>a.accountId); return db.transactions.filter(t=>ids.includes(t.accountId)).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)); }
 function invsForUser(db,uid)     { const ids=accsForUser(db,uid).map(a=>a.accountId); return db.invoices.filter(i=>ids.includes(i.accountId)).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)); }
 function reqsForUser(db,uid)     { const ids=accsForUser(db,uid).map(a=>a.accountId); return db.requisites.filter(r=>ids.includes(r.accountId)); }

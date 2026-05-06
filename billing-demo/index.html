@@ -99,8 +99,8 @@
         <div class="ni" :class="{active:page==='wallet'}"     @click="setPage('wallet')"><span class="ni-ico">◈</span> Финансы</div>
         <div class="ni" :class="{active:page==='invoices'}"   @click="setPage('invoices')">
           <span class="ni-ico">📋</span> Заявки и счета
-          <span class="ni-badge" x-show="pendingCount+db.invoices.filter(i=>i.type==='trade_invoice'&&i.accountId&&db.accounts.find(a=>a.accountId===i.accountId)?.userId===currentUserId&&i.status==='выставлен').length>0"
-              x-text="pendingCount+db.invoices.filter(i=>i.type==='trade_invoice'&&i.accountId&&db.accounts.find(a=>a.accountId===i.accountId)?.userId===currentUserId&&i.status==='выставлен').length"></span>
+          <span class="ni-badge" x-show="pendingCount+invs.filter(i=>i.type==='trade_invoice'&&i.status==='выставлен').length>0"
+              x-text="pendingCount+invs.filter(i=>i.type==='trade_invoice'&&i.status==='выставлен').length"></span>
         </div>
         <div class="ni" x-show="currentRole!=='br'" :class="{active:page==='deposits'}"   @click="setPage('deposits')"><span class="ni-ico">◉</span> Задатки</div>
         <div class="ni" x-show="currentRole!=='br'" :class="{active:page==='trades'}" @click="setPage('trades')"><span class="ni-ico">⚖</span> <span x-text="currentRole==='ut'||currentRole==='br'?'Торги':currentRole==='both'?'Торги / Мои торги':'Мои торги'"></span></div>
@@ -140,21 +140,21 @@
           <div class="acc-label">Задатковые счета</div>
           <div style="margin-top:8px">
             <div style="font-size:10px;color:var(--text3)">Задатковый УТ (03)</div>
-            <div style="font-size:16px;font-weight:600;margin:2px 0" x-text="fmt(db.accounts.find(a=>a.userId===currentUserId&&a.subAccountTypeId==='03')?.balanceFree||0)"></div>
-            <div class="acc-sub" :class="(db.accounts.find(a=>a.userId===currentUserId&&a.subAccountTypeId==='03')?.balanceReserved||0)>0?'amber':''"
-              x-text="(db.accounts.find(a=>a.userId===currentUserId&&a.subAccountTypeId==='03')?.balanceReserved||0)>0?'В резерве: '+fmt(db.accounts.find(a=>a.userId===currentUserId&&a.subAccountTypeId==='03')?.balanceReserved||0):'Резерв: 0,00 ₽'"></div>
+            <div style="font-size:16px;font-weight:600;margin:2px 0" x-text="fmt(db.accounts.find(a=>a.participantId===myPid&&a.subAccountTypeId==='03')?.balanceFree||0)"></div>
+            <div class="acc-sub" :class="(db.accounts.find(a=>a.participantId===myPid&&a.subAccountTypeId==='03')?.balanceReserved||0)>0?'amber':''"
+              x-text="(db.accounts.find(a=>a.participantId===myPid&&a.subAccountTypeId==='03')?.balanceReserved||0)>0?'В резерве: '+fmt(db.accounts.find(a=>a.participantId===myPid&&a.subAccountTypeId==='03')?.balanceReserved||0):'Резерв: 0,00 ₽'"></div>
             <div class="btn-row" style="margin-top:4px">
-              <button class="btn btn-p btn-sm" @click="openFundsDeposit(db.accounts.find(a=>a.userId===currentUserId&&a.subAccountTypeId==='03')?.accountId)">+ Пополнить</button>
-              <template x-if="(db.accounts.find(a=>a.userId===currentUserId&&a.subAccountTypeId==='03')?.balanceFree||0)>0">
-                <button class="btn btn-sm" @click="openWithdraw(db.accounts.find(a=>a.userId===currentUserId&&a.subAccountTypeId==='03')?.accountId||null)">↑ Вывести</button>
+              <button class="btn btn-p btn-sm" @click="openFundsDeposit(db.accounts.find(a=>a.participantId===myPid&&a.subAccountTypeId==='03')?.accountId)">+ Пополнить</button>
+              <template x-if="(db.accounts.find(a=>a.participantId===myPid&&a.subAccountTypeId==='03')?.balanceFree||0)>0">
+                <button class="btn btn-sm" @click="openWithdraw(db.accounts.find(a=>a.participantId===myPid&&a.subAccountTypeId==='03')?.accountId||null)">↑ Вывести</button>
               </template>
             </div>
           </div>
           <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
             <div style="font-size:10px;color:var(--text3)">Задатковый ОТ (04)</div>
-            <div style="font-size:16px;font-weight:600;margin:2px 0" x-text="fmt(db.accounts.find(a=>a.userId===currentUserId&&a.subAccountTypeId==='04')?.balanceFree||0)"></div>
-            <div class="acc-sub" :class="(db.accounts.find(a=>a.userId===currentUserId&&a.subAccountTypeId==='04')?.balanceReserved||0)>0?'amber':''"
-              x-text="(db.accounts.find(a=>a.userId===currentUserId&&a.subAccountTypeId==='04')?.balanceReserved||0)>0?'В резерве: '+fmt(db.accounts.find(a=>a.userId===currentUserId&&a.subAccountTypeId==='04')?.balanceReserved||0):'Резерв: 0,00 ₽'"></div>
+            <div style="font-size:16px;font-weight:600;margin:2px 0" x-text="fmt(db.accounts.find(a=>a.participantId===myPid&&a.subAccountTypeId==='04')?.balanceFree||0)"></div>
+            <div class="acc-sub" :class="(db.accounts.find(a=>a.participantId===myPid&&a.subAccountTypeId==='04')?.balanceReserved||0)>0?'amber':''"
+              x-text="(db.accounts.find(a=>a.participantId===myPid&&a.subAccountTypeId==='04')?.balanceReserved||0)>0?'В резерве: '+fmt(db.accounts.find(a=>a.participantId===myPid&&a.subAccountTypeId==='04')?.balanceReserved||0):'Резерв: 0,00 ₽'"></div>
             <div class="btn-row" style="margin-top:4px">
               <button class="btn btn-sm btn-green" @click="openWithdrawDeposit(null)">↑ Вывести задаток</button>
             </div>
@@ -263,6 +263,32 @@
   <!-- ЗАЯВКИ -->
   <section class="pg" :class="{active:page==='invoices'}">
     <div class="ptitle">Заявки и счета</div>
+    <!-- Сведения об участнике ЭТП и пользователях -->
+    <template x-if="currentParticipant">
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:16px;display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
+        <div style="flex:1;min-width:160px">
+          <div style="font-size:11px;color:var(--text3);margin-bottom:3px">Сведения об участнике ЭТП</div>
+          <div style="font-weight:600;font-size:13px" x-text="currentParticipant.name"></div>
+          <div style="font-size:11px;color:var(--text2);margin-top:2px">ИНН <span x-text="currentParticipant.inn"></span></div>
+          <div style="margin-top:5px">
+            <span class="badge" :class="currentParticipant.participantStatusId==='active'?'bs':'bp'"
+              x-text="currentParticipant.participantStatusId==='active'?'Аккредитован':'Ожидает аккредитации'"></span>
+          </div>
+        </div>
+        <div style="flex:0;min-width:160px">
+          <div style="font-size:11px;color:var(--text3);margin-bottom:6px">Пользователи участника</div>
+          <template x-for="u in currentParticipantUsers" :key="u.userId">
+            <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">
+              <span style="width:24px;height:24px;border-radius:50%;font-size:10px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff"
+                :style="u.userId===currentUserId?'background:var(--blue)':'background:var(--text3)'"
+                x-text="u.initials"></span>
+              <span style="font-size:12px" :style="u.userId===currentUserId?'font-weight:600':'color:var(--text2)'" x-text="u.name"></span>
+              <span x-show="u.userId===currentUserId" style="font-size:10px;color:var(--blue)">← вы</span>
+            </div>
+          </template>
+        </div>
+      </div>
+    </template>
     <template x-if="invs.filter(i=>!(i.status==='отклонено'&&(i.type==='trade_invoice'||i.type==='service_invoice'))).length===0"><div class="empty">Заявок пока нет</div></template>
     <template x-for="inv in invs.filter(i=>!(i.status==='отклонено'&&(i.type==='trade_invoice'||i.type==='service_invoice')))" :key="inv.invoiceId">
       <div class="inv-item">
@@ -288,10 +314,10 @@
             <template x-if="inv.status==='выставлен'&&inv.amount">
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                 <button class="btn btn-p btn-sm"
-                  :disabled="(db.accounts.find(a=>a.userId===currentUserId&&a.subAccountTypeId==='02')?.balanceFree||0)+(db.accounts.find(a=>a.userId===currentUserId&&a.subAccountTypeId==='02')?.balanceVirtual||0)<(inv.amount||0)"
+                  :disabled="(db.accounts.find(a=>a.participantId===myPid&&a.subAccountTypeId==='02')?.balanceFree||0)+(db.accounts.find(a=>a.participantId===myPid&&a.subAccountTypeId==='02')?.balanceVirtual||0)<(inv.amount||0)"
                   @click="payTradeInvoice(inv.invoiceId)">Оплатить с счёта услуг</button>
                 <button class="btn btn-sm" @click="openInvRequisites(inv.invoiceId)">📋 Реквизиты для оплаты</button>
-                <span style="font-size:11px;color:var(--text2)">Доступно: <b x-text="fmt((db.accounts.find(a=>a.userId===currentUserId&&a.subAccountTypeId==='02')?.balanceFree||0)+(db.accounts.find(a=>a.userId===currentUserId&&a.subAccountTypeId==='02')?.balanceVirtual||0))"></b></span>
+                <span style="font-size:11px;color:var(--text2)">Доступно: <b x-text="fmt((db.accounts.find(a=>a.participantId===myPid&&a.subAccountTypeId==='02')?.balanceFree||0)+(db.accounts.find(a=>a.participantId===myPid&&a.subAccountTypeId==='02')?.balanceVirtual||0))"></b></span>
               </div>
             </template>
             <template x-if="inv.status==='оплачен'||inv.status==='оплачено вне ЭТП'">
@@ -340,13 +366,13 @@
               <div style="font-size:13px;font-weight:600;margin-bottom:3px" x-text="svc.name"></div>
               <div style="font-size:11px;color:var(--text2)" x-text="'Стоимость: '+fmt(svc.price)"></div>
             </div>
-            <template x-if="!db.invoices.find(i=>i.type==='оплата услуги'&&i.status==='исполнено'&&i.accountId&&db.accounts.find(a=>a.accountId===i.accountId)?.userId===currentUserId&&i.description&&i.description.includes(svc.name))&&!db.invoices.find(i=>i.type==='пополнение'&&i.description&&i.description.includes(svc.name)&&i.accountId&&db.accounts.find(a=>a.accountId===i.accountId)?.userId===currentUserId&&!['отклонено','исполнено'].includes(i.status))">
+            <template x-if="!db.invoices.find(i=>i.type==='оплата услуги'&&i.status==='исполнено'&&i.accountId&&isMyAcc(i.accountId)&&i.description&&i.description.includes(svc.name))&&!db.invoices.find(i=>i.type==='пополнение'&&i.description&&i.description.includes(svc.name)&&i.accountId&&isMyAcc(i.accountId)&&!['отклонено','исполнено'].includes(i.status))">
               <button class="btn btn-p btn-sm" @click="openBRService(svc.id)">Заказать</button>
             </template>
-            <template x-if="db.invoices.find(i=>i.type==='пополнение'&&i.description&&i.description.includes(svc.name)&&i.accountId&&db.accounts.find(a=>a.accountId===i.accountId)?.userId===currentUserId&&!['отклонено','исполнено'].includes(i.status))">
+            <template x-if="db.invoices.find(i=>i.type==='пополнение'&&i.description&&i.description.includes(svc.name)&&i.accountId&&isMyAcc(i.accountId)&&!['отклонено','исполнено'].includes(i.status))">
               <span class="badge bc">В обработке</span>
             </template>
-            <template x-if="db.invoices.find(i=>i.type==='оплата услуги'&&i.status==='исполнено'&&i.accountId&&db.accounts.find(a=>a.accountId===i.accountId)?.userId===currentUserId&&i.description&&i.description.includes(svc.name))">
+            <template x-if="db.invoices.find(i=>i.type==='оплата услуги'&&i.status==='исполнено'&&i.accountId&&isMyAcc(i.accountId)&&i.description&&i.description.includes(svc.name))">
               <span class="badge bs">Оплачено ✓</span>
             </template>
           </div>
@@ -1008,6 +1034,8 @@
         auctions:          ['auctionId','organizerId','title','lotId','minDeposit','startPrice','debtorName','status','deadline','protocolSignedAt','contractSignedWith'],
         auditLog:          ['auditId','eventType','entityType','entityId','actorUserId','actorType','createdAt'],
         syncState:         ['syncStateId','accountingSystem','endpointType','lastSyncAt','updatedAt'],
+        etp_users:         ['userIdd','participantId','login','fullName','roleOperator','roleOrganizer','roleParticipant','m4dActualId','userStatusId'],
+        etp_participants:  ['participantIdd','name','inn','flagJur','roleOrganizer','roleParticipant','participantStatusId'],
       },
       tables: [
         {id:'accounts',           label:'Accounts',           desc:'Виртуальные счета (п.3.2.1)'},
@@ -1024,14 +1052,33 @@
         {id:'syncState',          label:'SyncState',          desc:'Состояние синхронизации (п.3.2.13)'},
         {id:'tradeApplications',  label:'TradeApplications',  desc:'Заявки на торги'},
         {id:'auctions',           label:'Auctions',           desc:'Торги'},
+        {id:'etp_users',          label:'Users',              desc:'Пользователи ЭТП — Основная БД (DB_bTrade, MSSQL)', db:'etp'},
+        {id:'etp_participants',   label:'Participants',       desc:'Участники ЭТП — Основная БД (DB_bTrade, MSSQL)', db:'etp'},
       ],
       get rows() {
         const t=this.selectedTable;
+        // В Accounts.userId хранится строковый ключ биллинга — конвертируем в integer UserIDD для отображения
+        if(t==='accounts') return (db.accounts||[]).map(a=>({...a, userId: a.userId ? userIddOf(a.userId) : null}));
         if(t==='accountBalances')    return db.accountBalances||[];
         if(t==='fundAllocations')    return db.fundAllocations||[];
         if(t==='accountingRequests') return db.accountingRequests||[];
         if(t==='auditLog')           return db.auditLog||[];
         if(t==='syncState')          return db.syncState||[];
+        if(t==='etp_users') {
+          const logins={'USR-BR1':'br1','USR-UT1':'u1','USR-UT2':'u2','USR-UT3':'u3','USR-OT1':'o1','USR-OT2':'o2','USR-OT3':'o3','USR-OT4':'o4','USR-BO1':'b1','USR-ADM':'adm'};
+          return USERS.map((u,i)=>({
+            userIdd: 1000+(i+1),
+            participantId: u.participantId,
+            login: logins[u.userId]||u.userId.toLowerCase(),
+            fullName: u.name,
+            roleOperator: u.role==='admin',
+            roleOrganizer: ['ot','both'].includes(u.role),
+            roleParticipant: ['ut','both','br'].includes(u.role),
+            m4dActualId: null,
+            userStatusId: u.role==='admin'?'admin':'active',
+          }));
+        }
+        if(t==='etp_participants') return PARTICIPANTS.map(p=>({...p, participantIdd:p.participantId}));
         return db[t]||[];
       },
       get cols() { return this.schemas[this.selectedTable]||Object.keys((this.rows[0])||{}); },
@@ -1041,6 +1088,8 @@
         if(t==='accountingRequests') return (db.accountingRequests||[]).length;
         if(t==='auditLog')           return (db.auditLog||[]).length;
         if(t==='syncState')          return (db.syncState||[]).length;
+        if(t==='etp_users')          return USERS.length;
+        if(t==='etp_participants')   return PARTICIPANTS.length;
         return (db[t]||[]).length;
       },
       isMoney(col) { return col.startsWith('balance')||col==='amount'||col==='amountPaid'; },
@@ -1058,13 +1107,18 @@
       <!-- Кнопки-переключатели таблиц -->
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px">
         <template x-for="t in tables" :key="t.id">
-          <button class="btn btn-sm" :class="selectedTable===t.id?'btn-p':''" @click="selectedTable=t.id" :title="t.desc">
+          <button class="btn btn-sm" :class="selectedTable===t.id?'btn-p':''" @click="selectedTable=t.id" :title="t.desc"
+            :style="t.db==='etp'?'border-style:dashed;':''"  >
             <span x-text="t.label"></span>
+            <template x-if="t.db==='etp'"><span style="margin-left:4px;font-size:9px;color:var(--amber);font-weight:700">ЭТП</span></template>
             <span style="margin-left:4px;opacity:.6;font-size:10px" x-text="'('+rowCount(t.id)+')'"></span>
           </button>
         </template>
       </div>
       <!-- Заголовок -->
+      <template x-if="tables.find(t=>t.id===selectedTable)?.db==='etp'">
+        <div class="panel-warn" style="margin-bottom:10px;font-size:11px">Основная БД ЭТП (DB_bTrade, MSSQL). Данные для контекста — биллинговая БД хранит только идентификаторы (UserID, ParticipantID).</div>
+      </template>
       <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:8px">
         <div style="font-size:14px;font-weight:600" x-text="tables.find(t=>t.id===selectedTable)?.label"></div>
         <div style="font-size:11px;color:var(--text3)" x-text="tables.find(t=>t.id===selectedTable)?.desc"></div>
@@ -1262,16 +1316,16 @@
           <!-- Оплата услуг ЭТП из задатка — несколько счетов -->
           <template x-if="wdDepType==='service'">
             <div>
-              <template x-if="db.invoices.filter(i=>i.type==='trade_invoice'&&i.accountId&&db.accounts.find(a=>a.accountId===i.accountId)?.userId===currentUserId&&i.status==='выставлен'&&i.amount&&(!selectedDepositForWithdraw||(()=>{const dep=selectedDepositForWithdraw;const auc=auctionById(dep.auctionId);const debtor=auc?.debtorName;return debtor?(auctionById(i.auctionId)?.debtorName===debtor):i.auctionId===dep.auctionId;})())).length===0">
+              <template x-if="db.invoices.filter(i=>i.type==='trade_invoice'&&i.accountId&&isMyAcc(i.accountId)&&i.status==='выставлен'&&i.amount&&(!selectedDepositForWithdraw||(()=>{const dep=selectedDepositForWithdraw;const auc=auctionById(dep.auctionId);const debtor=auc?.debtorName;return debtor?(auctionById(i.auctionId)?.debtorName===debtor):i.auctionId===dep.auctionId;})())).length===0">
                 <div class="wbox">Нет выставленных счетов к оплате по данному задатку.</div>
               </template>
-              <template x-if="db.invoices.filter(i=>i.type==='trade_invoice'&&i.accountId&&db.accounts.find(a=>a.accountId===i.accountId)?.userId===currentUserId&&i.status==='выставлен'&&i.amount&&(!selectedDepositForWithdraw||i.auctionId===selectedDepositForWithdraw.auctionId)).length>0">
+              <template x-if="db.invoices.filter(i=>i.type==='trade_invoice'&&i.accountId&&isMyAcc(i.accountId)&&i.status==='выставлен'&&i.amount&&(!selectedDepositForWithdraw||i.auctionId===selectedDepositForWithdraw.auctionId)).length>0">
                 <div>
                   <div class="ibox" style="margin-bottom:8px;font-size:11px">Показаны счета по должнику: <b x-text="auctionById(selectedDepositForWithdraw?.auctionId||'')?.debtorName||'—'"></b> (все торги с этим должником)</div>
                   <div class="fg">
                     <label class="fl">Счета к оплате (можно выбрать несколько)</label>
                     <div style="display:flex;flex-direction:column;gap:0">
-                    <template x-for="ti in db.invoices.filter(i=>i.type==='trade_invoice'&&i.accountId&&db.accounts.find(a=>a.accountId===i.accountId)?.userId===currentUserId&&i.status==='выставлен'&&i.amount&&(!selectedDepositForWithdraw||i.auctionId===selectedDepositForWithdraw.auctionId))" :key="ti.invoiceId">
+                    <template x-for="ti in db.invoices.filter(i=>i.type==='trade_invoice'&&i.accountId&&isMyAcc(i.accountId)&&i.status==='выставлен'&&i.amount&&(!selectedDepositForWithdraw||i.auctionId===selectedDepositForWithdraw.auctionId))" :key="ti.invoiceId">
                       <label style="display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:6px;cursor:pointer;font-size:12px;width:100%;box-sizing:border-box;clear:both"
                              :style="(wdDepSelectedInvoices||[]).includes(ti.invoiceId)?'border-color:var(--blue);background:var(--blue-lt)':''">
                         <input type="checkbox" :checked="(wdDepSelectedInvoices||[]).includes(ti.invoiceId)"

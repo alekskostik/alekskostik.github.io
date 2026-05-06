@@ -5,7 +5,7 @@ async function grantVirtual(page: import('@playwright/test').Page, amount: strin
   await switchUser(page, 'Адм');
   await goTo(page, 'Счета участников');
   const row = active(page).locator('.admin-table tbody tr')
-    .filter({ hasText: 'Иванов' })
+    .filter({ hasText: 'УТ 1' })
     .filter({ hasText: 'Для услуг' })
     .first();
   await row.locator('button', { hasText: 'Вирт.' }).click();
