@@ -329,6 +329,7 @@ document.addEventListener('alpine:init', () => {
     badgeClass(s)   { return ({'исполнено':'bs','завершена':'bs','на рассмотрении':'bp','создано':'bc','отклонено':'be','отменён':'be','в обработке':'bc','зарезервирован':'bc','переведён':'bs','снят резерв':'bs','выведен':'bs','удерживается':'bp','отменён':'be','принята':'bs','победитель':'bs','второй участник':'bp','резерв снят':'bs','победитель (договор)':'bs','Приём заявок':'bs','Протокол опубликован':'bp','Договор подписан':'bs','Приостановлены':'be','Заблокирован':'be','Активен':'bs'})[s]||'bc'; },
     txClass(tx)     { return tx.type==='резервирование задатка'?'tx-res':tx.amount>0?'tx-plus':'tx-minus'; },
     depositBadge(s) { return ({'зарезервирован':'bc','переведён':'bs','снят резерв':'bs','выведен':'bs','удерживается':'bp','отменён':'be'})[s]||'bc'; },
+    depositStatusLabel(s) { return ({'зарезервирован':'заблокирован','снят резерв':'блокировка снята','переведён':'переведён','выведен':'выведен','удерживается':'удерживается','отменён':'отменён'})[s]||s; },
 
     openFundsService(accId) { this.fsAccId=accId||this.serviceAccs[0]?.accountId||null; this.fsAmount=''; this.fsError=''; this.fsLoading=false; this.fsRid=''; this.openModal('fundsService'); },
     openFundsDeposit(accId) { this.fdAccId=accId||this.depositAccs[0]?.accountId||null; this.fdAmount=''; this.fdTrade=''; this.fdError=''; this.fdLoading=false; this.fdRid=''; this.openModal('fundsDeposit'); },
@@ -592,7 +593,7 @@ document.addEventListener('alpine:init', () => {
       if((dep.virtualAmount||0)>0) payerAcc.balanceVirtual=(payerAcc.balanceVirtual||0)+dep.virtualAmount;
       dep.status='снят резерв'; dep.releasedAt=now||new Date().toISOString(); dep.allowedWithdrawalType='own';
       if(realPart>0 || (dep.virtualAmount||0)>0){
-        this.db.transactions.unshift({txId:genId('TX'),accountId:dep.payerAccountId,type:'снятие резерва задатка',status:'завершена',amount:dep.amount,createdAt:now||new Date().toISOString(),description:'Снятие резерва задатка (торги '+dep.auctionId+')'+(dep.virtualAmount>0?' — возврат '+fmt(dep.virtualAmount)+' вирт.':'')});
+        this.db.transactions.unshift({txId:genId('TX'),accountId:dep.payerAccountId,type:'снятие резерва задатка',status:'завершена',amount:dep.amount,createdAt:now||new Date().toISOString(),description:'Снятие блокировки задатка (торги '+dep.auctionId+')'+(dep.virtualAmount>0?' — возврат '+fmt(dep.virtualAmount)+' вирт.':'')});
       }
     },
 
@@ -804,7 +805,7 @@ document.addEventListener('alpine:init', () => {
 
     // ── ADMIN ──
     adminToggleBlock(accountId) { const acc=this.db.accounts.find(a=>a.accountId===accountId); if(!acc) return; if(!confirm((acc.isBlocked?'Разблокировать':'Заблокировать')+' счёт '+acc.displayNumber+'?'))return; acc.isBlocked=!acc.isBlocked; acc.accountStatusId=acc.isBlocked?'blocked':'active'; acc.blockReason=acc.isBlocked?'Административная блокировка':null; acc.updatedAt=new Date().toISOString(); if(!this.db.auditLog)this.db.auditLog=[]; this.db.auditLog.push({auditId:genId('AL'),eventType:acc.isBlocked?'account_blocked':'account_unblocked',entityType:'account',entityId:accountId,actorUserId:this.currentUserId,actorType:'self',payload:{isBlocked:acc.isBlocked},createdAt:new Date().toISOString()}); saveDB(this.db); },
-    adminReleaseDeposit(depositId) { const dep=this.db.deposits.find(d=>d.depositId===depositId); if(!dep) return; if(!confirm('Принудительно снять резерв задатка '+fmt(dep.amount)+'?'))return; this._releaseDeposit(dep); this._log('deposit_released','deposit',depositId,{amount:dep.amount,auctionId:dep.auctionId}); saveDB(this.db); },
+    adminReleaseDeposit(depositId) { const dep=this.db.deposits.find(d=>d.depositId===depositId); if(!dep) return; if(!confirm('Принудительно снять блокировку задатка '+fmt(dep.amount)+'?'))return; this._releaseDeposit(dep); this._log('deposit_released','deposit',depositId,{amount:dep.amount,auctionId:dep.auctionId}); saveDB(this.db); },
     adminVerifyReq(reqId) { const req=this.db.requisites.find(r=>r.requisiteId===reqId); if(!req) return; req.isVerified=true; this._log('requisite_verified','requisite',reqId,{accountId:req.accountId}); saveDB(this.db); },
     adminVerifyPrc(prcId) { const p=this.db.principals?.find(p=>p.principalId===prcId); if(!p) return; p.isVerified=true; this._log('principal_verified','principal',prcId,{fullName:p.fullName}); saveDB(this.db); },
 

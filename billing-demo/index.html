@@ -142,7 +142,7 @@
             <div style="font-size:10px;color:var(--text3)">Задатковый УТ (03)</div>
             <div style="font-size:16px;font-weight:600;margin:2px 0" x-text="fmt(db.accounts.find(a=>a.participantId===myPid&&a.subAccountTypeId==='03')?.balanceFree||0)"></div>
             <div class="acc-sub" :class="(db.accounts.find(a=>a.participantId===myPid&&a.subAccountTypeId==='03')?.balanceReserved||0)>0?'amber':''"
-              x-text="(db.accounts.find(a=>a.participantId===myPid&&a.subAccountTypeId==='03')?.balanceReserved||0)>0?'В резерве: '+fmt(db.accounts.find(a=>a.participantId===myPid&&a.subAccountTypeId==='03')?.balanceReserved||0):'Резерв: 0,00 ₽'"></div>
+              x-text="(db.accounts.find(a=>a.participantId===myPid&&a.subAccountTypeId==='03')?.balanceReserved||0)>0?'Заблокировано: '+fmt(db.accounts.find(a=>a.participantId===myPid&&a.subAccountTypeId==='03')?.balanceReserved||0):'Заблокировано: 0,00 ₽'"></div>
             <div class="btn-row" style="margin-top:4px">
               <button class="btn btn-p btn-sm" @click="openFundsDeposit(db.accounts.find(a=>a.participantId===myPid&&a.subAccountTypeId==='03')?.accountId)">+ Пополнить</button>
               <template x-if="(db.accounts.find(a=>a.participantId===myPid&&a.subAccountTypeId==='03')?.balanceFree||0)>0">
@@ -154,7 +154,7 @@
             <div style="font-size:10px;color:var(--text3)">Задатковый ОТ (04)</div>
             <div style="font-size:16px;font-weight:600;margin:2px 0" x-text="fmt(db.accounts.find(a=>a.participantId===myPid&&a.subAccountTypeId==='04')?.balanceFree||0)"></div>
             <div class="acc-sub" :class="(db.accounts.find(a=>a.participantId===myPid&&a.subAccountTypeId==='04')?.balanceReserved||0)>0?'amber':''"
-              x-text="(db.accounts.find(a=>a.participantId===myPid&&a.subAccountTypeId==='04')?.balanceReserved||0)>0?'В резерве: '+fmt(db.accounts.find(a=>a.participantId===myPid&&a.subAccountTypeId==='04')?.balanceReserved||0):'Резерв: 0,00 ₽'"></div>
+              x-text="(db.accounts.find(a=>a.participantId===myPid&&a.subAccountTypeId==='04')?.balanceReserved||0)>0?'Заблокировано: '+fmt(db.accounts.find(a=>a.participantId===myPid&&a.subAccountTypeId==='04')?.balanceReserved||0):'Заблокировано: 0,00 ₽'"></div>
             <div class="btn-row" style="margin-top:4px">
               <button class="btn btn-sm btn-green" @click="openWithdrawDeposit(null)">↑ Вывести задаток</button>
             </div>
@@ -180,7 +180,7 @@
             </template>
           </div>
           <template x-if="acc.subAccountTypeId==='03'||acc.subAccountTypeId==='04'">
-            <div class="acc-sub" :class="acc.balanceReserved>0?'amber':''" x-text="acc.balanceReserved>0?'В резерве: '+fmt(acc.balanceReserved):'Резерв: 0,00 ₽'"></div>
+            <div class="acc-sub" :class="acc.balanceReserved>0?'amber':''" x-text="acc.balanceReserved>0?'Заблокировано: '+fmt(acc.balanceReserved):'Заблокировано: 0,00 ₽'"></div>
           </template>
           <template x-if="acc.subAccountTypeId==='01'||acc.subAccountTypeId==='02'">
             <div class="acc-sub" :class="db.invoices.filter(i=>i.accountId===acc.accountId&&(i.type==='trade_invoice'||i.type==='service_invoice')&&i.status==='выставлен'&&i.amount).reduce((s,i)=>s+i.amount,0)>0?'amber':''">
@@ -387,7 +387,7 @@
   <section class="pg" :class="{active:page==='deposits'}">
     <div class="ptitle">Задатки</div>
     <template x-if="currentRole==='ut'">
-      <div class="ibox">Средства резервируются при подаче заявки на торги. Резерв снимается в течение 24 часов после публикации протокола, если ваша заявка не является заявкой победителя.</div>
+      <div class="ibox">Средства блокируются при подаче заявки на торги. Блокировка снимается в течение 24 часов после публикации протокола, если ваша заявка не является заявкой победителя.</div>
     </template>
     <template x-if="currentRole==='ot'||currentRole==='both'">
       <div class="ibox">Задатки участников торгов. После публикации протокола задаток победителя переводится на задатковый счёт. Доступны варианты использования: вывод на реквизиты должника, вывод на собственные реквизиты ОТ, либо зачёт в счёт оплаты услуг ЭТП с выводом остатка.</div>
@@ -403,14 +403,14 @@
         <div style="display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--text2);margin-bottom:4px">
           <template x-if="currentRole==='ot'"><span x-text="'Участник: '+dep.payer"></span></template>
           <span x-text="fmtDt(dep.reservedAt)"></span>
-          <span class="badge" :class="depositBadge(dep.status)" x-text="dep.status"></span>
+          <span class="badge" :class="depositBadge(dep.status)" x-text="depositStatusLabel(dep.status)"></span>
           <template x-if="(dep.virtualAmount||0)>0">
             <span class="badge" style="background:var(--amber-lt);color:var(--amber)">Вирт.: <span x-text="fmt(dep.virtualAmount)"></span></span>
           </template>
         </div>
         <!-- 24ч удержание: показываем дату -->
         <template x-if="dep.status==='удерживается'&&dep.releaseAfter">
-          <div class="hold-info">Резерв удерживается до <b x-text="fmtDt(dep.releaseAfter)"></b></div>
+          <div class="hold-info">Блокировка удерживается до <b x-text="fmtDt(dep.releaseAfter)"></b></div>
         </template>
         <template x-if="currentRole==='ot'&&dep.status==='переведён'">
           <button class="btn btn-sm btn-green" style="margin-top:6px" @click="openWithdrawDeposit(dep.depositId)">↑ Вывести на реквизиты должника</button>
@@ -422,7 +422,7 @@
   <!-- ТОРГИ УТ -->
   <section class="pg" :class="{active:page==='trades'&&(currentRole==='ut'||currentRole==='both')}">
     <div class="ptitle">Торги</div>
-    <div class="ibox">Для участия в торгах подайте заявку и внесите задаток. Резерв снимается через 24 ч после публикации протокола, если ваша заявка не является заявкой победителя.</div>
+    <div class="ibox">Для участия в торгах подайте заявку и внесите задаток. Блокировка снимается через 24 ч после публикации протокола, если ваша заявка не является заявкой победителя.</div>
     <template x-for="auc in auctionsForUT" :key="auc.auctionId">
       <div class="auc-card">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
@@ -850,7 +850,7 @@
     <div class="ptitle">Счета участников</div>
     <div class="panel-warn">Администратор ЭТП. Блокировка счёта приостанавливает все операции по нему.</div>
     <table class="admin-table" style="min-width:900px">
-      <thead><tr><th style="white-space:nowrap">Пользователь</th><th style="white-space:nowrap">Номер счёта</th><th style="white-space:nowrap">Тип</th><th style="white-space:nowrap">Свободно</th><th style="white-space:nowrap">В резерве</th><th>Виртуальные / долг</th><th>Статус</th><th>Действия</th></tr></thead>
+      <thead><tr><th style="white-space:nowrap">Пользователь</th><th style="white-space:nowrap">Номер счёта</th><th style="white-space:nowrap">Тип</th><th style="white-space:nowrap">Свободно</th><th style="white-space:nowrap">Заблокировано</th><th>Виртуальные / долг</th><th>Статус</th><th>Действия</th></tr></thead>
       <tbody>
         <template x-for="acc in adminAllAccounts" :key="acc.accountId">
           <tr>
@@ -902,11 +902,11 @@
             <td x-text="dep.payerName"></td>
             <td x-text="fmt(dep.amount)"></td>
             <td><span x-text="(dep.virtualAmount||0)>0?fmt(dep.virtualAmount):'—'" :style="(dep.virtualAmount||0)>0?'color:var(--amber);font-weight:600':'color:var(--text3)'"></span></td>
-            <td><span class="badge" :class="depositBadge(dep.status)" x-text="dep.status"></span></td>
+            <td><span class="badge" :class="depositBadge(dep.status)" x-text="depositStatusLabel(dep.status)"></span></td>
             <td style="font-size:10px" x-text="dep.status==='удерживается'&&dep.releaseAfter?'до '+fmtDt(dep.releaseAfter):dep.status==='зарезервирован'?fmtDt(dep.reservedAt):'—'"></td>
             <td>
               <template x-if="dep.status==='зарезервирован'||dep.status==='удерживается'">
-                <button class="btn btn-sm btn-red" @click="adminReleaseDeposit(dep.depositId)">Снять резерв</button>
+                <button class="btn btn-sm btn-red" @click="adminReleaseDeposit(dep.depositId)">Снять блокировку</button>
               </template>
               <template x-if="dep.status!=='зарезервирован'&&dep.status!=='удерживается'">
                 <span style="font-size:10px;color:var(--text3)">—</span>
@@ -1268,13 +1268,13 @@
           <div class="fg"><label class="fl">Реквизиты получателя</label>
             <template x-if="verifiedReqs.length>0"><select class="fi"><template x-for="r in verifiedReqs" :key="r.requisiteId"><option x-text="r.fullName+' · ...'+r.accountNumber.slice(-4)+' · '+r.bankName"></option></template></select></template>
             <template x-if="verifiedReqs.length===0"><div class="wbox">Нет верифицированных реквизитов.</div></template></div>
-          <div class="wbox" x-show="!isDepositWithdraw">Средства в резерве выводу не подлежат.</div>
+          <div class="wbox" x-show="!isDepositWithdraw">Заблокированные средства выводу не подлежат.</div>
           <template x-if="isDepositWithdraw">
-            <div class="ibox">С задаткового счёта можно вывести только свободные средства, не зарезервированные как задатки.</div>
+            <div class="ibox">С задаткового счёта можно вывести только свободные средства, не заблокированные как задатки.</div>
           </template>
         </div>
       </template>
-      <template x-if="mStep===1"><div class="sbox"><div class="si">✓</div><div class="st">Заявление подано</div><div class="ss">Средства зарезервированы. Статус — в разделе «Заявки и счета».</div></div></template>
+      <template x-if="mStep===1"><div class="sbox"><div class="si">✓</div><div class="st">Заявление подано</div><div class="ss">Средства заблокированы. Статус — в разделе «Заявки и счета».</div></div></template>
     </div>
     <div class="mf"><button class="btn" @click="closeModal()">Закрыть</button>
       <template x-if="mStep===0"><button class="btn btn-p" :disabled="wdLoading" @click="submitWithdraw()"><span x-show="wdLoading" class="spinner"></span><span x-text="wdLoading?'Создаём...':'Подать заявление'"></span></button></template></div>
@@ -1500,7 +1500,7 @@
         <div>
           <div style="font-size:13px;font-weight:600;margin-bottom:4px" x-text="auctionById(appAuctionId)?.title||''"></div>
           <div style="font-size:11px;color:var(--text2);margin-bottom:12px">Торги № <b x-text="appAuctionId"></b> · Должник: <b x-text="auctionById(appAuctionId)?.debtorName||''"></b></div>
-          <div class="ibox">При подаче заявки сумма задатка немедленно резервируется. Резерв снимается через 24 ч после публикации протокола, если ваша заявка не является заявкой победителя.</div>
+          <div class="ibox">При подаче заявки сумма задатка немедленно блокируется. Блокировка снимается через 24 ч после публикации протокола, если ваша заявка не является заявкой победителя.</div>
           <div class="fg"><label class="fl">Сумма задатка, ₽ <span style="color:var(--red)">*</span></label>
             <input class="fi" type="number" x-model="appAmount" min="1">
             <div class="fh">Минимальная сумма: <b x-text="fmt(auctionById(appAuctionId)?.minDeposit||0)"></b></div></div>
@@ -1514,7 +1514,7 @@
           <div class="err-msg" x-text="appError"></div>
         </div>
       </template>
-      <template x-if="mStep===1"><div class="sbox"><div class="si">✓</div><div class="st">Заявка подана</div><div class="ss">Задаток зарезервирован. Заявка видна организатору в разделе «Мои торги».</div></div></template>
+      <template x-if="mStep===1"><div class="sbox"><div class="si">✓</div><div class="st">Заявка подана</div><div class="ss">Задаток заблокирован. Заявка видна организатору в разделе «Мои торги».</div></div></template>
     </div>
     <div class="mf"><button class="btn" @click="closeModal()">Закрыть</button>
       <template x-if="mStep===0"><button class="btn btn-p" :disabled="appLoading" @click="submitTradeApp()"><span x-show="appLoading" class="spinner"></span><span x-text="appLoading?'Подаём...':'Подать заявку и внести задаток'"></span></button></template></div>

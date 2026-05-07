@@ -28,7 +28,7 @@ test.describe('Задатки', () => {
 
     await goTo(page, 'Задатки');
     await expect(active(page).locator('.dep-item', { hasText: '481201' }))
-      .toContainText('зарезервирован');
+      .toContainText('заблокирован');
   });
 
   test('После протокола: победитель — переведён, второй — удерживается', async ({ page }) => {

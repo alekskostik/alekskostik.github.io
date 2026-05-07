@@ -1,4 +1,4 @@
-const STORE_KEY = 'cdt_billing_v29'; // ключ не меняем — добавляем миграцию _v28→29
+const STORE_KEY = 'cdt_billing_v30';
 
 // Участники ЭТП (Основная БД, DB_bTrade.dbo.Participants)
 const PARTICIPANTS = [
@@ -89,26 +89,27 @@ function makeAccount(accountId, userId, participantId, subAccountTypeId, label, 
 }
 
 function makeAccounts(userId, role, yr, seq, inn) {
-  const n = t => `${yr}.0${seq}054.${inn}-${t}`;
   const pid = parseInt(seq, 10);
+  const nP = t => `${yr}.${String(pid).padStart(6,'0')}.${inn}-${t}`;
+  const nU = t => `${yr}.${String(userIddOf(userId)||pid).padStart(6,'0')}.${inn}-${t}`;
   // Типы 02/03/04 принадлежат участнику (pid), не конкретному пользователю → userId=null
   // Тип 01 — личный счёт БР (userId заполнен, participantId=null)
   if (role === 'ut') return [
-    makeAccount(`ACC-${userId}-02`, null, pid, '02', 'Счёт услуг',         n('02')),
-    makeAccount(`ACC-${userId}-03`, null, pid, '03', 'Задатковый счёт',    n('03')),
+    makeAccount(`ACC-${userId}-02`, null, pid, '02', 'Счёт услуг',         nP('02')),
+    makeAccount(`ACC-${userId}-03`, null, pid, '03', 'Задатковый счёт',    nP('03')),
   ];
   if (role === 'ot') return [
-    makeAccount(`ACC-${userId}-02`, null, pid, '02', 'Счёт услуг',         n('02')),
-    makeAccount(`ACC-${userId}-04`, null, pid, '04', 'Задатковый счёт ОТ', n('04')),
+    makeAccount(`ACC-${userId}-02`, null, pid, '02', 'Счёт услуг',         nP('02')),
+    makeAccount(`ACC-${userId}-04`, null, pid, '04', 'Задатковый счёт ОТ', nP('04')),
   ];
   if (role === 'br') return [
-    makeAccount(`ACC-${userId}-01`, userId, null, '01', 'Счёт услуг БР',   n('01')),
-    makeAccount(`ACC-${userId}-03`, null, pid,    '03', 'Задатковый счёт', n('03')),
+    makeAccount(`ACC-${userId}-01`, userId, null, '01', 'Счёт услуг БР',   nU('01')),
+    makeAccount(`ACC-${userId}-03`, null, pid,    '03', 'Задатковый счёт', nP('03')),
   ];
   if (role === 'both') return [
-    makeAccount(`ACC-${userId}-02`, null, pid, '02', 'Счёт услуг',     n('02')),
-    makeAccount(`ACC-${userId}-03`, null, pid, '03', 'Задатковый УТ',  n('03')),
-    makeAccount(`ACC-${userId}-04`, null, pid, '04', 'Задатковый ОТ',  n('04')),
+    makeAccount(`ACC-${userId}-02`, null, pid, '02', 'Счёт услуг',     nP('02')),
+    makeAccount(`ACC-${userId}-03`, null, pid, '03', 'Задатковый УТ',  nP('03')),
+    makeAccount(`ACC-${userId}-04`, null, pid, '04', 'Задатковый ОТ',  nP('04')),
   ];
   return [];
 }
@@ -152,7 +153,7 @@ function buildSeed() {
   ];
 
   return {
-    _v: 29,
+    _v: 30,
     currentUserId: 'USR-UT1',
     auctions: buildAuctions(),
     accounts,
@@ -325,6 +326,19 @@ function migrateV27toV28(db) {
   return db;
 }
 
+// ── Миграция v29 → v30: обновление формата displayNumber (6-знаковый идентификатор) ──
+function migrateV29toV30(db) {
+  db._v = 30;
+  db.accounts.forEach(a => {
+    const m = (a.displayNumber || '').match(/^(\d{2})\.(\d+)\.(\d{5})-(\d{2})$/);
+    if (!m) return;
+    const [, yr, , inn, type] = m;
+    const idNum = a.userId ? (userIddOf(a.userId) || 0) : (a.participantId || 0);
+    a.displayNumber = `${yr}.${String(idNum).padStart(6,'0')}.${inn}-${type}`;
+  });
+  return db;
+}
+
 // ── Миграция v28 → v29: типы 02-04 → userId=null, participantId заполняется из USERS ──
 function migrateV28toV29(db) {
   db._v = 29;
@@ -345,12 +359,13 @@ function loadDB() {
     const raw = localStorage.getItem(STORE_KEY);
     if (raw) {
       const p=JSON.parse(raw);
-      if(p._v===29) return p;
-      if(p._v===28) { const m=migrateV28toV29(p); saveDB(m); return m; }
+      if(p._v===30) return p;
+      if(p._v===29) { const m=migrateV29toV30(p); saveDB(m); return m; }
+      if(p._v===28) { const m=migrateV29toV30(migrateV28toV29(p)); saveDB(m); return m; }
     }
     // попытка мигрировать с v27
     const old = localStorage.getItem('cdt_billing_v27');
-    if (old) { const p=JSON.parse(old); if(p._v===27) { const m=migrateV28toV29(migrateV27toV28(p)); saveDB(m); return m; } }
+    if (old) { const p=JSON.parse(old); if(p._v===27) { const m=migrateV29toV30(migrateV28toV29(migrateV27toV28(p))); saveDB(m); return m; } }
   } catch(e) {}
   const db=buildSeed(); saveDB(db); return db;
 }
