@@ -5,8 +5,8 @@ document.addEventListener('alpine:init', () => {
     modal:null, mStep:0,
 
     fsAccId:null, fsAmount:'', fsError:'', fsLoading:false, fsRid:'',
-    fdAccId:null, fdAmount:'', fdTrade:'', fdError:'', fdLoading:false, fdRid:'',
-    wdAccId:null, wdAmount:'', wdType:'own', wdError:'', wdLoading:false, wdRid:'',
+    fdAccId:null, fdAmount:'', fdTrade:'', fdPrincipalId:'', fdError:'', fdLoading:false, fdRid:'',
+    wdAccId:null, wdAmount:'', wdType:'own', wdReqId:'', wdError:'', wdLoading:false, wdRid:'',
     wdDepositId:null, wdDepType:'debtor', wdDepSvcAmt:'', wdDepRestType:'debtor', wdDepSvcInvoiceId:'', wdDepSelectedInvoices:[], wdDepOwnReqId:'', wdDepError:'', wdDepLoading:false, wdDepRid:'',
     payServiceId:'acc',
     trFrom:null, trTo:null, trAmount:'', trError:'', trLoading:false, trRid:'',
@@ -177,6 +177,27 @@ document.addEventListener('alpine:init', () => {
     },
     get otDepAcc()     { return this.db.accounts.find(a=>a.participantId===this.myPid&&a.subAccountTypeId==='04')||null; },
     get verifiedReqs() { return reqsForUser(this.db,this.currentUserId).filter(r=>r.isVerified); },
+    // текущий участник является агентом (может работать с принципалами)
+    get isAgent() {
+      const pid=this.myPid;
+      return pid!=null&&(PARTICIPANTS.find(p=>p.participantId===pid)?.isAgent||false);
+    },
+    // принципалы, привязанные к текущему задатковому счёту в форме пополнения (только если участник — агент)
+    get depositPrincipals() {
+      if (!this.fdAccId||!this.isAgent) return [];
+      return (this.db.principals||[]).filter(p=>p.agentAccountId===this.fdAccId&&p.isVerified);
+    },
+    // реквизиты для вывода с задаткового счёта: собственные + принципалов этого счёта
+    get depositWithdrawReqs() {
+      const ownReqs = this.verifiedReqs.filter(r=>!r.principalId);
+      const prcIds = (this.db.principals||[]).filter(p=>p.agentAccountId===this.wdAccId&&p.isVerified).map(p=>p.principalId);
+      const prcReqs = this.verifiedReqs.filter(r=>r.principalId&&prcIds.includes(r.principalId));
+      return [...ownReqs, ...prcReqs];
+    },
+    // есть ли активные аллокации с принципалом на текущем счёте вывода
+    get wdAccHasPrincipalFunds() {
+      return (this.db.fundAllocations||[]).some(a=>a.accountId===this.wdAccId&&a.fundSourceType==='add_funds'&&a.status==='active'&&a.principalId);
+    },
     get payServices()  { return SERVICES.filter(s=>!s.roles||s.roles.includes(this.currentRole)); },
     get currentPayService() { return this.payServices.find(s=>s.id===this.payServiceId); },
     get servAcc()      { return this.serviceAccs[0]||null; },
@@ -190,7 +211,7 @@ document.addEventListener('alpine:init', () => {
     _activeVirtualDebt(accountId) {
       // задатки в резерве с виртуальной частью
       const depDebt=this.db.deposits
-        .filter(d=>d.payerAccountId===accountId&&(d.virtualAmount||0)>0&&d.status==='зарезервирован')
+        .filter(d=>d.payerAccountId===accountId&&(d.virtualAmount||0)>0&&d.status==='заблокирован')
         .reduce((s,d)=>s+d.virtualAmount,0);
       // услуги, оплаченные виртуальными (фиксируем в транзакции с типом 'оплата услуги' и полем virtualPart)
       const svcDebt=this.db.transactions
@@ -212,7 +233,7 @@ document.addEventListener('alpine:init', () => {
       });
     },
     get adminAllDeposits() {
-      return [...this.db.deposits].sort((a,b)=>new Date(b.reservedAt)-new Date(a.reservedAt)).map(d=>{
+      return [...this.db.deposits].sort((a,b)=>new Date(b.blockedAt)-new Date(a.blockedAt)).map(d=>{
         const payer=this.db.accounts.find(a=>a.accountId===d.payerAccountId);
         let payerName='';
         if(payer?.userId) payerName=USERS.find(u=>u.userId===payer.userId)?.name||'';
@@ -326,14 +347,14 @@ document.addEventListener('alpine:init', () => {
       this.db.auditLog.push({auditId:genId('AL'),eventType,entityType,entityId,actorUserId:actorType==='system'?null:this.currentUserId,actorType,payload,createdAt:new Date().toISOString()});
     },
     userByAccId(id) { const acc=this.db.accounts.find(a=>a.accountId===id); return USERS.find(u=>u.userId===acc?.userId); },
-    badgeClass(s)   { return ({'исполнено':'bs','завершена':'bs','на рассмотрении':'bp','создано':'bc','отклонено':'be','отменён':'be','в обработке':'bc','зарезервирован':'bc','переведён':'bs','снят резерв':'bs','выведен':'bs','удерживается':'bp','отменён':'be','принята':'bs','победитель':'bs','второй участник':'bp','резерв снят':'bs','победитель (договор)':'bs','Приём заявок':'bs','Протокол опубликован':'bp','Договор подписан':'bs','Приостановлены':'be','Заблокирован':'be','Активен':'bs'})[s]||'bc'; },
-    txClass(tx)     { return tx.type==='резервирование задатка'?'tx-res':tx.amount>0?'tx-plus':'tx-minus'; },
-    depositBadge(s) { return ({'зарезервирован':'bc','переведён':'bs','снят резерв':'bs','выведен':'bs','удерживается':'bp','отменён':'be'})[s]||'bc'; },
-    depositStatusLabel(s) { return ({'зарезервирован':'заблокирован','снят резерв':'блокировка снята','переведён':'переведён','выведен':'выведен','удерживается':'удерживается','отменён':'отменён'})[s]||s; },
+    badgeClass(s)   { return ({'исполнено':'bs','завершена':'bs','на рассмотрении':'bp','создано':'bc','отклонено':'be','отменён':'be','в обработке':'bc','заблокирован':'bc','переведён':'bs','снята блокировка':'bs','выведен':'bs','удерживается':'bp','принята':'bs','победитель':'bs','второй участник':'bp','победитель (договор)':'bs','Приём заявок':'bs','Протокол опубликован':'bp','Договор подписан':'bs','Приостановлены':'be','Заблокирован':'be','Активен':'bs'})[s]||'bc'; },
+    txClass(tx)     { return tx.type==='блокировка задатка'?'tx-res':tx.amount>0?'tx-plus':'tx-minus'; },
+    depositBadge(s) { return ({'заблокирован':'bc','переведён':'bs','снята блокировка':'bs','выведен':'bs','удерживается':'bp','отменён':'be'})[s]||'bc'; },
+    depositStatusLabel(s) { return ({'снята блокировка':'блокировка снята'})[s]||s; },
 
     openFundsService(accId) { this.fsAccId=accId||this.serviceAccs[0]?.accountId||null; this.fsAmount=''; this.fsError=''; this.fsLoading=false; this.fsRid=''; this.openModal('fundsService'); },
-    openFundsDeposit(accId) { this.fdAccId=accId||this.depositAccs[0]?.accountId||null; this.fdAmount=''; this.fdTrade=''; this.fdError=''; this.fdLoading=false; this.fdRid=''; this.openModal('fundsDeposit'); },
-    openWithdraw(accId)     { this.wdAccId=accId||this.serviceAccs[0]?.accountId||null; this.wdAmount=''; this.wdType='own'; this.wdError=''; this.wdLoading=false; this.wdRid=''; this.openModal('withdraw'); },
+    openFundsDeposit(accId) { this.fdAccId=accId||this.depositAccs[0]?.accountId||null; this.fdAmount=''; this.fdTrade=''; this.fdPrincipalId=''; this.fdError=''; this.fdLoading=false; this.fdRid=''; this.openModal('fundsDeposit'); },
+    openWithdraw(accId)     { this.wdAccId=accId||this.serviceAccs[0]?.accountId||null; this.wdAmount=''; this.wdType='own'; this.wdReqId=this.verifiedReqs.filter(r=>!r.principalId)[0]?.requisiteId||''; this.wdError=''; this.wdLoading=false; this.wdRid=''; this.openModal('withdraw'); },
     openWithdrawDeposit(depositId) { this.wdDepositId=depositId||null; this.wdDepType='debtor'; this.wdDepSvcAmt=''; this.wdDepRestType='debtor'; this.wdDepSvcInvoiceId=''; this.wdDepSelectedInvoices=[]; this.wdDepOwnReqId=this.verifiedReqs[0]?.requisiteId||''; this.wdDepError=''; this.wdDepLoading=false; this.wdDepRid=''; this.openModal('withdrawDeposit'); },
     openTransfer()   { this.trAmount=''; this.trError=''; this.trLoading=false; this.trRid=''; this.openModal('transfer'); },
     openAddReq()     { this.rqAccId=this.serviceAccs[0]?.accountId||null; this.rqName=''; this.rqInn=''; this.rqKpp=''; this.rqBank=''; this.rqBik=''; this.rqAccNum=''; this.rqError=''; this.rqLoading=false; this.openModal('addReq'); },
@@ -371,7 +392,8 @@ document.addEventListener('alpine:init', () => {
       setTimeout(()=>{
         this.fdRid=reqIdGen('P');
         const invId=genId('INV');
-        this.db.invoices.unshift({invoiceId:invId,accountId:this.fdAccId,type:'пополнение',status:'создано',sourceType:'internal',isActive:true,amountPaid:null,amount:parseFloat(this.fdAmount),requestId:this.fdRid,createdAt:new Date().toISOString(),description:'Пополнение задаткового счёта'+(this.fdTrade?' (торги '+this.fdTrade+')':'')});
+        const fdPrc=this.fdPrincipalId?(this.db.principals||[]).find(p=>p.principalId===this.fdPrincipalId):null;
+        this.db.invoices.unshift({invoiceId:invId,accountId:this.fdAccId,type:'пополнение',status:'создано',sourceType:'internal',isActive:true,amountPaid:null,amount:parseFloat(this.fdAmount),requestId:this.fdRid,createdAt:new Date().toISOString(),principalId:this.fdPrincipalId||null,description:'Пополнение задаткового счёта'+(fdPrc?' (принципал: '+fdPrc.fullName+')':'')+(this.fdTrade?' (торги '+this.fdTrade+')':'')});
         if(!this.db.accountingRequests) this.db.accountingRequests=[];
         this.db.accountingRequests.push({requestId:genId('AR'),externalRequestId:this.fdRid,requestType:'add_funds',endpoint:'POST /invoices',status:'pending',attemptCount:1,lastAttemptAt:new Date().toISOString(),resolvedAt:null,relatedEntityType:'invoice',relatedEntityId:invId,createdAt:new Date().toISOString()});
         this._log('invoice_created','invoice',invId,{type:'пополнение задатка',amount:parseFloat(this.fdAmount),accountId:this.fdAccId,requestId:this.fdRid,tradeId:this.fdTrade||null});
@@ -390,10 +412,13 @@ document.addEventListener('alpine:init', () => {
         const balBefore=acc.balanceFree+acc.balanceReserved+(acc.balanceVirtual||0);
         acc.balanceFree-=amt; acc.balanceReserved+=amt;
         this.wdRid=reqIdGen('W');
-        const desc=acc.subAccountTypeId==='03'?'Вывод средств с задаткового счёта':'Вывод д/с на реквизиты';
+        const selReq=(this.db.requisites||[]).find(r=>r.requisiteId===this.wdReqId);
+        const wdPrcId=selReq?.principalId||null;
+        const wdPrcName=wdPrcId?(this.db.principals||[]).find(p=>p.principalId===wdPrcId)?.fullName:null;
+        const desc=wdPrcName?'Вывод задатка на реквизиты принципала '+wdPrcName:(acc.subAccountTypeId==='03'?'Вывод средств с задаткового счёта':'Вывод д/с на реквизиты');
         const invId=genId('INV'); const now=new Date().toISOString();
         this.db.invoices.unshift({invoiceId:invId,accountId:this.wdAccId,type:'вывод',status:'на рассмотрении',sourceType:'internal',isActive:true,amountPaid:null,amount:amt,requestId:this.wdRid,createdAt:now,description:desc});
-        this.db.transactions.unshift({txId:genId('TX'),accountId:this.wdAccId,type:'вывод',status:'в обработке',amount:-amt,balanceBefore:balBefore,balanceAfter:balBefore-amt,actorType:'self',performedByUserId:userIddOf(this.currentUserId),onBehalfOfParticipantId:null,onBehalfOfPrincipalId:null,requestId:this.wdRid,sourceInvoiceId:invId,sourceDepositId:null,createdAt:now,description:desc});
+        this.db.transactions.unshift({txId:genId('TX'),accountId:this.wdAccId,type:'вывод',status:'в обработке',amount:-amt,balanceBefore:balBefore,balanceAfter:balBefore-amt,actorType:'self',performedByUserId:userIddOf(this.currentUserId),onBehalfOfParticipantId:null,onBehalfOfPrincipalId:wdPrcId,requestId:this.wdRid,sourceInvoiceId:invId,sourceDepositId:null,createdAt:now,description:desc});
         if(!this.db.accountingRequests) this.db.accountingRequests=[];
         this.db.accountingRequests.push({requestId:genId('AR'),externalRequestId:this.wdRid,requestType:'withdrawal',endpoint:'POST /withdrawals',status:'pending',attemptCount:1,lastAttemptAt:now,resolvedAt:null,relatedEntityType:'invoice',relatedEntityId:invId,createdAt:now});
         if(!this.db.auditLog) this.db.auditLog=[];
@@ -562,17 +587,20 @@ document.addEventListener('alpine:init', () => {
         const depId=genId('DEP');
         const orgParticipantId=USERS.find(u=>u.userId===auc.organizerId)?.participantId;
         const otDepAcc=this.db.accounts.find(a=>a.participantId===orgParticipantId&&a.subAccountTypeId==='04');
-        this.db.deposits.unshift({depositId:depId,payerAccountId:depAcc.accountId,receiverAccountId:otDepAcc?.accountId||null,auctionId:auc.auctionId,tradeLotId:auc.lotId,amount:amt,virtualAmount:virtInDeposit,status:'зарезервирован',reservedAt:now,releasedAt:null,releaseAfter:null,holdUntilContract:false,payer:this.currentUser.name,allowedWithdrawalType:'none',debtorInn:auc.debtorReq?.inn||null,principalId:null});
         // FundAllocations: исходная запись add_funds → split, дочерняя deposit_ut
-        const existingAlloc=(this.db.fundAllocations||[]).find(a=>a.accountId===depAcc.accountId&&a.fundSourceType==='add_funds'&&a.status==='active'&&a.amount>=amt);
+        // Предпочитаем аллокацию с principalId (агент внёс задаток от имени принципала)
+        const _allocCandidates=(this.db.fundAllocations||[]).filter(a=>a.accountId===depAcc.accountId&&a.fundSourceType==='add_funds'&&a.status==='active'&&a.amount>=amt);
+        const existingAlloc=_allocCandidates.find(a=>a.principalId)||_allocCandidates.find(a=>!a.principalId)||null;
+        const allocPrincipalId=existingAlloc?.principalId||null;
+        this.db.deposits.unshift({depositId:depId,payerAccountId:depAcc.accountId,receiverAccountId:otDepAcc?.accountId||null,auctionId:auc.auctionId,tradeLotId:auc.lotId,amount:amt,virtualAmount:virtInDeposit,status:'заблокирован',blockedAt:now,releasedAt:null,releaseAfter:null,holdUntilContract:false,payer:this.currentUser.name,allowedWithdrawalType:'none',debtorInn:auc.debtorReq?.inn||null,principalId:allocPrincipalId});
         if(existingAlloc){
           existingAlloc.status='split';
           const remainder=existingAlloc.amount-amt;
-          this.db.fundAllocations.push({allocId:genId('FA'),parentAllocationId:existingAlloc.allocId,accountId:depAcc.accountId,amount:amt,fundSourceType:'deposit_ut',sourceEntityId:depId,sourceTransactionId:null,allowedWithdrawalType:'none',auctionId:auc.auctionId,debtorInn:auc.debtorReq?.inn||null,status:'active',expiresAt:null,createdAt:now});
-          if(remainder>0) this.db.fundAllocations.push({allocId:genId('FA'),parentAllocationId:existingAlloc.allocId,accountId:depAcc.accountId,amount:remainder,fundSourceType:'add_funds',sourceEntityId:null,sourceTransactionId:null,allowedWithdrawalType:'own',auctionId:null,debtorInn:null,status:'active',expiresAt:null,createdAt:now});
+          this.db.fundAllocations.push({allocId:genId('FA'),parentAllocationId:existingAlloc.allocId,accountId:depAcc.accountId,amount:amt,fundSourceType:'deposit_ut',sourceEntityId:depId,sourceTransactionId:null,allowedWithdrawalType:'none',principalId:allocPrincipalId,auctionId:auc.auctionId,debtorInn:auc.debtorReq?.inn||null,status:'active',expiresAt:null,createdAt:now});
+          if(remainder>0) this.db.fundAllocations.push({allocId:genId('FA'),parentAllocationId:existingAlloc.allocId,accountId:depAcc.accountId,amount:remainder,fundSourceType:'add_funds',sourceEntityId:null,sourceTransactionId:null,allowedWithdrawalType:allocPrincipalId?'principal':'own',principalId:allocPrincipalId,auctionId:null,debtorInn:null,status:'active',expiresAt:null,createdAt:now});
         }
         const txId=genId('TX');
-        this.db.transactions.unshift({txId,accountId:depAcc.accountId,type:'резервирование задатка',status:'завершена',amount:-amt,balanceBefore:balBefore,balanceAfter:balBefore-amt,actorType:'self',performedByUserId:userIddOf(this.currentUserId),onBehalfOfParticipantId:null,onBehalfOfPrincipalId:null,requestId:null,sourceDepositId:depId,createdAt:now,description:'Задаток по торгам '+auc.auctionId+(virtInDeposit>0?' (вкл. '+fmt(virtInDeposit)+' вирт.)':'')});
+        this.db.transactions.unshift({txId,accountId:depAcc.accountId,type:'блокировка задатка',status:'завершена',amount:-amt,balanceBefore:balBefore,balanceAfter:balBefore-amt,actorType:'self',performedByUserId:userIddOf(this.currentUserId),onBehalfOfParticipantId:null,onBehalfOfPrincipalId:null,requestId:null,sourceDepositId:depId,createdAt:now,description:'Задаток по торгам '+auc.auctionId+(virtInDeposit>0?' (вкл. '+fmt(virtInDeposit)+' вирт.)':'')});
         this.db.tradeApplications.unshift({appId:genId('APP'),auctionId:auc.auctionId,bidderId:this.currentUserId,depositId:depId,amount:amt,virtualAmount:virtInDeposit,status:'принята',createdAt:now});
         // AuditLog
         if(!this.db.auditLog) this.db.auditLog=[];
@@ -591,9 +619,15 @@ document.addEventListener('alpine:init', () => {
       payerAcc.balanceFree+=realPart;
       // возвращаем виртуальную часть обратно в balanceVirtual (долг по задатку снимается)
       if((dep.virtualAmount||0)>0) payerAcc.balanceVirtual=(payerAcc.balanceVirtual||0)+dep.virtualAmount;
-      dep.status='снят резерв'; dep.releasedAt=now||new Date().toISOString(); dep.allowedWithdrawalType='own';
+      const wdType=dep.principalId?'principal':'own';
+      dep.status='снята блокировка'; dep.releasedAt=now||new Date().toISOString(); dep.allowedWithdrawalType=wdType;
       if(realPart>0 || (dep.virtualAmount||0)>0){
-        this.db.transactions.unshift({txId:genId('TX'),accountId:dep.payerAccountId,type:'снятие резерва задатка',status:'завершена',amount:dep.amount,createdAt:now||new Date().toISOString(),description:'Снятие блокировки задатка (торги '+dep.auctionId+')'+(dep.virtualAmount>0?' — возврат '+fmt(dep.virtualAmount)+' вирт.':'')});
+        this.db.transactions.unshift({txId:genId('TX'),accountId:dep.payerAccountId,type:'снятие блокировки задатка',status:'завершена',amount:dep.amount,createdAt:now||new Date().toISOString(),description:'Снятие блокировки задатка (торги '+dep.auctionId+')'+(dep.virtualAmount>0?' — возврат '+fmt(dep.virtualAmount)+' вирт.':'')});
+      }
+      // если задаток был привязан к принципалу — возвращаем помеченную аллокацию
+      if(dep.principalId&&realPart>0){
+        if(!this.db.fundAllocations) this.db.fundAllocations=[];
+        this.db.fundAllocations.push({allocId:genId('FA'),parentAllocationId:null,accountId:dep.payerAccountId,amount:realPart,fundSourceType:'add_funds',sourceEntityId:dep.depositId,sourceTransactionId:null,allowedWithdrawalType:'principal',principalId:dep.principalId,auctionId:null,debtorInn:null,status:'active',expiresAt:null,createdAt:now||new Date().toISOString()});
       }
     },
 
@@ -718,7 +752,7 @@ document.addEventListener('alpine:init', () => {
       const acc=this.db.accounts.find(a=>a.accountId===alloc.accountId);
       // свободный остаток = начисление минус задействованное (в активных задатках)
       const activeInDeposits=this.db.deposits
-        .filter(d=>d.payerAccountId===alloc.accountId&&(d.virtualAmount||0)>0&&d.status==='зарезервирован')
+        .filter(d=>d.payerAccountId===alloc.accountId&&(d.virtualAmount||0)>0&&d.status==='заблокирован')
         .reduce((s,d)=>s+d.virtualAmount,0);
       // при аннуляции списываем свободный виртуальный остаток с balanceVirtual
       // свободный остаток = то что не задействовано в активных задатках
@@ -730,7 +764,7 @@ document.addEventListener('alpine:init', () => {
         this.db.transactions.unshift({txId:genId('TX'),accountId:alloc.accountId,type:'аннуляция виртуальных д/с',status:'завершена',amount:-freeVirt,createdAt:now,description:'Аннуляция виртуальных д/с — свободный остаток ('+fmt(freeVirt)+')'});
       }
       // задатки с виртуальной частью → отзываем, возвращаем только реальную часть
-      const virtDeps=this.db.deposits.filter(d=>d.payerAccountId===alloc.accountId&&(d.virtualAmount||0)>0&&d.status==='зарезервирован');
+      const virtDeps=this.db.deposits.filter(d=>d.payerAccountId===alloc.accountId&&(d.virtualAmount||0)>0&&d.status==='заблокирован');
       virtDeps.forEach(dep=>{
         const payerAcc=this.db.accounts.find(a=>a.accountId===dep.payerAccountId);
         const realPart=dep.amount-dep.virtualAmount;
@@ -739,7 +773,7 @@ document.addEventListener('alpine:init', () => {
           if(realPart>0) payerAcc.balanceFree+=realPart;
           // виртуальная часть НЕ возвращается — она аннулирована
         }
-        dep.status='снят резерв'; dep.releasedAt=now; dep.virtualAmount=0;
+        dep.status='снята блокировка'; dep.releasedAt=now; dep.virtualAmount=0;
         const app=this.db.tradeApplications.find(a=>a.depositId===dep.depositId);
         if(app){ app.status='отозвана (аннуляция вирт. средств)'; app.virtualAmount=0; }
         this.db.transactions.unshift({txId:genId('TX'),accountId:dep.payerAccountId,type:'отзыв задатка',status:'завершена',amount:realPart,createdAt:now,description:'Задаток отозван — аннуляция виртуальных д/с (торги '+dep.auctionId+')'});
@@ -827,8 +861,8 @@ document.addEventListener('alpine:init', () => {
             // погашаем задатки с виртуальной частью (FIFO по дате резервирования)
             let rem=toRepay;
             this.db.deposits
-              .filter(d=>d.payerAccountId===inv.accountId&&(d.virtualAmount||0)>0&&d.status==='зарезервирован')
-              .sort((a,b)=>new Date(a.reservedAt)-new Date(b.reservedAt))
+              .filter(d=>d.payerAccountId===inv.accountId&&(d.virtualAmount||0)>0&&d.status==='заблокирован')
+              .sort((a,b)=>new Date(a.blockedAt)-new Date(b.blockedAt))
               .forEach(d=>{
                 if(rem<=0) return;
                 const pay=Math.min(d.virtualAmount||0, rem);
@@ -851,7 +885,7 @@ document.addEventListener('alpine:init', () => {
           // FundAllocations: создаём запись add_funds на зачисленную сумму
           if(!this.db.fundAllocations) this.db.fundAllocations=[];
           const txIdNew=this.db.transactions[0].txId;
-          this.db.fundAllocations.push({allocId:genId('FA'),parentAllocationId:null,accountId:inv.accountId,amount:toFree,fundSourceType:'add_funds',sourceEntityId:inv.invoiceId,sourceTransactionId:txIdNew,allowedWithdrawalType:'own',auctionId:null,debtorInn:null,status:'active',expiresAt:null,createdAt:now});
+          this.db.fundAllocations.push({allocId:genId('FA'),parentAllocationId:null,accountId:inv.accountId,amount:toFree,fundSourceType:'add_funds',sourceEntityId:inv.invoiceId,sourceTransactionId:txIdNew,allowedWithdrawalType:inv.principalId?'principal':'own',principalId:inv.principalId||null,auctionId:null,debtorInn:null,status:'active',expiresAt:null,createdAt:now});
           // для БР: после подтверждения пополнения создаём запись об оплате услуги
           if(inv.description&&inv.description.startsWith('Оплата услуги:')){
             const svcName=inv.description.replace('Оплата услуги: ','');

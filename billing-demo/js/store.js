@@ -1,14 +1,14 @@
-const STORE_KEY = 'cdt_billing_v30';
+const STORE_KEY = 'cdt_billing_v31';
 
 // Участники ЭТП (Основная БД, DB_bTrade.dbo.Participants)
 const PARTICIPANTS = [
-  { participantId:1, name:'ООО «Тест Трейд»',         inn:'7801234561',   flagJur:true,  roleParticipant:true,  roleOrganizer:false, participantStatusId:'active'  },
-  { participantId:2, name:'Петрова Анна Сергеевна',      inn:'780123456789', flagJur:false, roleParticipant:true,  roleOrganizer:false, participantStatusId:'active'  },
-  { participantId:3, name:'ООО «Новиков»',             inn:'7801234563',   flagJur:true,  roleParticipant:true,  roleOrganizer:false, participantStatusId:'active'  },
-  { participantId:4, name:'ООО «Сидоров и Партнёры»', inn:'7801234564',   flagJur:true,  roleParticipant:false, roleOrganizer:true,  participantStatusId:'active'  },
-  { participantId:5, name:'ООО «Козлова»',             inn:'7801234565',   flagJur:true,  roleParticipant:false, roleOrganizer:true,  participantStatusId:'active'  },
-  { participantId:6, name:'Громов Павел Витальевич',    inn:'780123456896', flagJur:false, roleParticipant:false, roleOrganizer:false, participantStatusId:'pending' },
-  { participantId:7, name:'ООО «Власов и Партнёры»',  inn:'7801234567',   flagJur:true,  roleParticipant:true,  roleOrganizer:true,  participantStatusId:'active'  },
+  { participantId:1, name:'ООО «Тест Трейд»',         inn:'7801234561',   flagJur:true,  roleParticipant:true,  roleOrganizer:false, participantStatusId:'active',  isAgent:true  },
+  { participantId:2, name:'Петрова Анна Сергеевна',      inn:'780123456789', flagJur:false, roleParticipant:true,  roleOrganizer:false, participantStatusId:'active',  isAgent:false },
+  { participantId:3, name:'ООО «Новиков»',             inn:'7801234563',   flagJur:true,  roleParticipant:true,  roleOrganizer:false, participantStatusId:'active',  isAgent:false },
+  { participantId:4, name:'ООО «Сидоров и Партнёры»', inn:'7801234564',   flagJur:true,  roleParticipant:false, roleOrganizer:true,  participantStatusId:'active',  isAgent:false },
+  { participantId:5, name:'ООО «Козлова»',             inn:'7801234565',   flagJur:true,  roleParticipant:false, roleOrganizer:true,  participantStatusId:'active',  isAgent:false },
+  { participantId:6, name:'Громов Павел Витальевич',    inn:'780123456896', flagJur:false, roleParticipant:false, roleOrganizer:false, participantStatusId:'pending', isAgent:false },
+  { participantId:7, name:'ООО «Власов и Партнёры»',  inn:'7801234567',   flagJur:true,  roleParticipant:true,  roleOrganizer:true,  participantStatusId:'active',  isAgent:false },
 ];
 
 // Пользователи ЭТП (Основная БД, DB_bTrade.dbo.Users)
@@ -153,7 +153,7 @@ function buildSeed() {
   ];
 
   return {
-    _v: 30,
+    _v: 31,
     currentUserId: 'USR-UT1',
     auctions: buildAuctions(),
     accounts,
@@ -301,6 +301,8 @@ function migrateV27toV28(db) {
     });
   }
   db.requisites.forEach(r => { if (r.principalId === undefined) r.principalId = null; });
+  if (db.fundAllocations) db.fundAllocations.forEach(a => { if (a.principalId === undefined) a.principalId = null; });
+  if (db.invoices) db.invoices.forEach(i => { if (i.principalId === undefined) i.principalId = null; });
   if (!db.fundAllocations) {
     db.fundAllocations = (db.virtualAllocations || []).map(va => ({
       allocId:va.allocId, parentAllocationId:null, accountId:va.accountId,
@@ -323,6 +325,21 @@ function migrateV27toV28(db) {
       { syncStateId:'SS-4', accountingSystem:'buh', endpointType:'invoices', lastSyncAt:'2026-01-01T00:00:00Z', updatedAt:'2026-01-01T00:00:00Z' },
     ];
   }
+  return db;
+}
+
+// ── Миграция v30 → v31: reservedAt→blockedAt, статусы и типы транзакций задатков ──
+function migrateV30toV31(db) {
+  db._v = 31;
+  (db.deposits || []).forEach(d => {
+    if ('reservedAt' in d) { d.blockedAt = d.reservedAt; delete d.reservedAt; }
+    if (d.status === 'зарезервирован') d.status = 'заблокирован';
+    if (d.status === 'снят резерв')    d.status = 'снята блокировка';
+  });
+  (db.transactions || []).forEach(t => {
+    if (t.type === 'резервирование задатка')  t.type = 'блокировка задатка';
+    if (t.type === 'снятие резерва задатка')  t.type = 'снятие блокировки задатка';
+  });
   return db;
 }
 
@@ -359,13 +376,16 @@ function loadDB() {
     const raw = localStorage.getItem(STORE_KEY);
     if (raw) {
       const p=JSON.parse(raw);
-      if(p._v===30) return p;
-      if(p._v===29) { const m=migrateV29toV30(p); saveDB(m); return m; }
-      if(p._v===28) { const m=migrateV29toV30(migrateV28toV29(p)); saveDB(m); return m; }
+      if(p._v===31) return p;
+      if(p._v===30) { const m=migrateV30toV31(p); saveDB(m); return m; }
+      if(p._v===29) { const m=migrateV30toV31(migrateV29toV30(p)); saveDB(m); return m; }
+      if(p._v===28) { const m=migrateV30toV31(migrateV29toV30(migrateV28toV29(p))); saveDB(m); return m; }
     }
-    // попытка мигрировать с v27
+    // попытка мигрировать со старых ключей
+    const v30 = localStorage.getItem('cdt_billing_v30');
+    if (v30) { const p=JSON.parse(v30); const m=migrateV30toV31(p); saveDB(m); return m; }
     const old = localStorage.getItem('cdt_billing_v27');
-    if (old) { const p=JSON.parse(old); if(p._v===27) { const m=migrateV29toV30(migrateV28toV29(migrateV27toV28(p))); saveDB(m); return m; } }
+    if (old) { const p=JSON.parse(old); if(p._v===27) { const m=migrateV30toV31(migrateV29toV30(migrateV28toV29(migrateV27toV28(p)))); saveDB(m); return m; } }
   } catch(e) {}
   const db=buildSeed(); saveDB(db); return db;
 }
@@ -373,7 +393,7 @@ function saveDB(db) {
   syncAccountBalances(db); // всегда актуализируем AccountBalances перед сохранением
   try { localStorage.setItem(STORE_KEY, JSON.stringify(db)); } catch(e) {}
 }
-function resetDB()   { localStorage.removeItem(STORE_KEY); localStorage.removeItem('cdt_billing_v27'); const db=buildSeed(); saveDB(db); return db; }
+function resetDB()   { localStorage.removeItem(STORE_KEY); localStorage.removeItem('cdt_billing_v30'); localStorage.removeItem('cdt_billing_v27'); const db=buildSeed(); saveDB(db); return db; }
 
 // Целочисленный userIdd (как в ETP DB) по строковому userId биллинга
 function userIddOf(uid) {

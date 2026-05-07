@@ -34,6 +34,7 @@
 .app-row-sum{font-weight:600;color:var(--green-dk);margin-left:auto;}
 .hold-info{font-size:10px;color:var(--amber);background:var(--amber-lt);padding:3px 8px;border-radius:6px;}
 .panel-warn{background:var(--amber-lt);border:1px solid var(--amber);border-radius:var(--radius);padding:10px 14px;margin-bottom:16px;font-size:11px;color:var(--amber);line-height:1.6;}
+.panel-info{background:var(--blue-lt);border:1px solid var(--blue);border-radius:var(--radius);padding:10px 14px;margin-bottom:16px;font-size:11px;color:var(--blue);line-height:1.6;}
 .inv-1c-item{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:8px;}
 .inv-1c-row{display:flex;align-items:center;gap:8px;}
 .btn-confirm{padding:5px 12px;font-size:11px;font-weight:600;border-radius:var(--radius);border:1px solid var(--green);background:var(--green-lt);color:var(--green-dk);cursor:pointer;font-family:var(--font);}
@@ -402,10 +403,13 @@
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--text2);margin-bottom:4px">
           <template x-if="currentRole==='ot'"><span x-text="'Участник: '+dep.payer"></span></template>
-          <span x-text="fmtDt(dep.reservedAt)"></span>
+          <span x-text="fmtDt(dep.blockedAt)"></span>
           <span class="badge" :class="depositBadge(dep.status)" x-text="depositStatusLabel(dep.status)"></span>
           <template x-if="(dep.virtualAmount||0)>0">
             <span class="badge" style="background:var(--amber-lt);color:var(--amber)">Вирт.: <span x-text="fmt(dep.virtualAmount)"></span></span>
+          </template>
+          <template x-if="dep.principalId">
+            <span class="badge" style="background:var(--blue-lt);color:var(--blue)">Принципал: <span x-text="(db.principals||[]).find(p=>p.principalId===dep.principalId)?.fullName||dep.principalId"></span></span>
           </template>
         </div>
         <!-- 24ч удержание: показываем дату -->
@@ -903,12 +907,12 @@
             <td x-text="fmt(dep.amount)"></td>
             <td><span x-text="(dep.virtualAmount||0)>0?fmt(dep.virtualAmount):'—'" :style="(dep.virtualAmount||0)>0?'color:var(--amber);font-weight:600':'color:var(--text3)'"></span></td>
             <td><span class="badge" :class="depositBadge(dep.status)" x-text="depositStatusLabel(dep.status)"></span></td>
-            <td style="font-size:10px" x-text="dep.status==='удерживается'&&dep.releaseAfter?'до '+fmtDt(dep.releaseAfter):dep.status==='зарезервирован'?fmtDt(dep.reservedAt):'—'"></td>
+            <td style="font-size:10px" x-text="dep.status==='удерживается'&&dep.releaseAfter?'до '+fmtDt(dep.releaseAfter):dep.status==='заблокирован'?fmtDt(dep.blockedAt):'—'"></td>
             <td>
-              <template x-if="dep.status==='зарезервирован'||dep.status==='удерживается'">
+              <template x-if="dep.status==='заблокирован'||dep.status==='удерживается'">
                 <button class="btn btn-sm btn-red" @click="adminReleaseDeposit(dep.depositId)">Снять блокировку</button>
               </template>
-              <template x-if="dep.status!=='зарезервирован'&&dep.status!=='удерживается'">
+              <template x-if="dep.status!=='заблокирован'&&dep.status!=='удерживается'">
                 <span style="font-size:10px;color:var(--text3)">—</span>
               </template>
             </td>
@@ -1016,6 +1020,7 @@
   <section class="pg" :class="{active:page==='adminModel'&&isAdmin}">
     <div class="ptitle">Модель данных</div>
     <div class="panel-warn">Просмотр текущего состояния таблиц БД биллинга. Только для разработки и отладки.</div>
+    <div class="panel-info" style="margin-top:8px;font-size:11px">По спецификации первичные ключи таблиц имеют тип UUID. В макете используются упрощённые строковые идентификаторы (например, <code>USR-UT1</code>, <code>ACC-001</code>) для удобства отладки.</div>
 
     <div x-data="{
       selectedTable: 'accounts',
@@ -1024,7 +1029,7 @@
         accountBalances:   ['balanceId','accountId','balanceFree','balanceReserved','balanceVirtual','balanceTotal','updatedAt'],
         transactions:      ['txId','accountId','type','status','amount','balanceBefore','balanceAfter','actorType','performedByUserId','onBehalfOfParticipantId','onBehalfOfPrincipalId','requestId','description','createdAt'],
         fundAllocations:   ['allocId','parentAllocationId','accountId','amount','fundSourceType','sourceEntityId','sourceTransactionId','allowedWithdrawalType','auctionId','debtorInn','status','expiresAt','createdAt'],
-        deposits:          ['depositId','payerAccountId','receiverAccountId','status','auctionId','tradeLotId','amount','virtualAmount','payer','debtorInn','principalId','reservedAt','releasedAt','holdUntilContract','createdAt'],
+        deposits:          ['depositId','payerAccountId','receiverAccountId','status','auctionId','tradeLotId','amount','virtualAmount','payer','debtorInn','principalId','blockedAt','releasedAt','holdUntilContract','createdAt'],
         invoices:          ['invoiceId','sourceType','accountId','type','status','isActive','amount','amountPaid','requestId','externalId','billingRequestId','description','createdAt','processedAt'],
         docRequests:       ['docRequestId','accountId','requestId','type','status','requestedAt','issuedAt','description'],
         accountingRequests:['requestId','externalRequestId','requestType','endpoint','status','attemptCount','lastAttemptAt','resolvedAt','relatedEntityType','relatedEntityId','createdAt'],
@@ -1034,8 +1039,8 @@
         auctions:          ['auctionId','organizerId','title','lotId','minDeposit','startPrice','debtorName','status','deadline','protocolSignedAt','contractSignedWith'],
         auditLog:          ['auditId','eventType','entityType','entityId','actorUserId','actorType','createdAt'],
         syncState:         ['syncStateId','accountingSystem','endpointType','lastSyncAt','updatedAt'],
-        etp_users:         ['userIdd','participantId','login','fullName','roleOperator','roleOrganizer','roleParticipant','m4dActualId','userStatusId'],
-        etp_participants:  ['participantIdd','name','inn','flagJur','roleOrganizer','roleParticipant','participantStatusId'],
+        etp_users:         ['userIdd','participantId','login','fullName','roleOperator','roleOrganizer','roleParticipant','m4dActualId'],
+        etp_participants:  ['participantIdd','name','inn','flagJur','roleOrganizer','roleParticipant','participantStatusId','isAgent'],
       },
       tables: [
         {id:'accounts',           label:'Accounts',           desc:'Виртуальные счета (п.3.2.1)'},
@@ -1075,7 +1080,6 @@
             roleOrganizer: ['ot','both'].includes(u.role),
             roleParticipant: ['ut','both','br'].includes(u.role),
             m4dActualId: null,
-            userStatusId: u.role==='admin'?'admin':'active',
           }));
         }
         if(t==='etp_participants') return PARTICIPANTS.map(p=>({...p, participantIdd:p.participantId}));
@@ -1226,6 +1230,18 @@
             </div>
           </div>
           <div class="fg"><label class="fl">Код торгов</label><input class="fi" type="text" x-model="fdTrade" placeholder="Например: 481201"><div class="fh">Укажите при пополнении под конкретные торги</div></div>
+          <template x-if="depositPrincipals.length>0">
+            <div class="fg">
+              <label class="fl">Принципал</label>
+              <select class="fi" x-model="fdPrincipalId">
+                <option value="">Нет (собственные средства)</option>
+                <template x-for="p in depositPrincipals" :key="p.principalId">
+                  <option :value="p.principalId" x-text="p.fullName+' (ИНН: '+p.inn+')'"></option>
+                </template>
+              </select>
+              <div class="fh">Укажите, если задаток вносится от имени принципала по МЧД</div>
+            </div>
+          </template>
           <div class="err-msg" x-text="fdError"></div>
         </div>
       </template>
@@ -1266,8 +1282,18 @@
           <div class="fg"><label class="fl">Сумма, ₽ <span style="color:var(--red)">*</span></label><input class="fi" type="number" x-model="wdAmount" min="1"><div class="err-msg" x-text="wdError"></div></div>
           <div class="fg"><label class="fl">Тип вывода</label><select class="fi" x-model="wdType"><option value="own">На свои реквизиты</option></select></div>
           <div class="fg"><label class="fl">Реквизиты получателя</label>
-            <template x-if="verifiedReqs.length>0"><select class="fi"><template x-for="r in verifiedReqs" :key="r.requisiteId"><option x-text="r.fullName+' · ...'+r.accountNumber.slice(-4)+' · '+r.bankName"></option></template></select></template>
-            <template x-if="verifiedReqs.length===0"><div class="wbox">Нет верифицированных реквизитов.</div></template></div>
+            <template x-if="(isDepositWithdraw?depositWithdrawReqs:verifiedReqs.filter(r=>!r.principalId)).length>0">
+              <select class="fi" x-model="wdReqId">
+                <template x-for="r in (isDepositWithdraw?depositWithdrawReqs:verifiedReqs.filter(r=>!r.principalId))" :key="r.requisiteId">
+                  <option :value="r.requisiteId" x-text="(r.principalId?'[Принципал] ':'')+r.fullName+' · ...'+r.accountNumber.slice(-4)+' · '+r.bankName"></option>
+                </template>
+              </select>
+            </template>
+            <template x-if="(isDepositWithdraw?depositWithdrawReqs:verifiedReqs.filter(r=>!r.principalId)).length===0"><div class="wbox">Нет верифицированных реквизитов.</div></template>
+          </div>
+          <template x-if="isDepositWithdraw&&wdAccHasPrincipalFunds">
+            <div class="ibox" style="background:var(--blue-lt);border-color:var(--blue)">На задатковом счёте есть средства принципала. Для вывода выберите реквизиты принципала.</div>
+          </template>
           <div class="wbox" x-show="!isDepositWithdraw">Заблокированные средства выводу не подлежат.</div>
           <template x-if="isDepositWithdraw">
             <div class="ibox">С задаткового счёта можно вывести только свободные средства, не заблокированные как задатки.</div>
