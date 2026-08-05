@@ -1,0 +1,3998 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0a1410">
+<title>Фаня в лесу</title>
+<style>
+/* =============================================================================
+ * styles.css — the shell around the canvas.
+ *
+ * Palette is pulled from the game's own world: bark, moss, low sun, bone. The
+ * UI sits on dark bark panels so it never competes with the path for attention.
+ * ========================================================================== */
+
+:root {
+  --bark:      #16241b;
+  --bark-deep: #0a1410;
+  --moss:      #7fc46a;
+  --sun:       #f2b544;
+  --bone:      #f4ead6;
+  --bone-dim:  rgba(244, 234, 214, 0.62);
+
+  --font-display: "Avenir Next Condensed", "Futura", "Trebuchet MS", "Segoe UI", system-ui, sans-serif;
+  --font-ui: "Avenir Next", "Trebuchet MS", "Segoe UI", system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: radial-gradient(120% 90% at 50% 8%, #16281f 0%, var(--bark-deep) 62%, #050b08 100%);
+  font-family: var(--font-ui);
+  color: var(--bone);
+  /* A runner must own every gesture: no scroll, no pinch, no pull-to-refresh,
+     no long-press callout, no double-tap zoom. */
+  touch-action: none;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* --------------------------------------------------------------- the stage */
+#stage {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 390px;
+  height: 844px;
+  transform: translate(-50%, -50%);
+  transform-origin: center center;
+  overflow: hidden;
+  border-radius: 22px;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.65);
+  background: var(--bark-deep);
+}
+
+#game {
+  display: block;
+  width: 390px;
+  height: 844px;
+  touch-action: none;
+}
+
+/* ------------------------------------------------------------------ menus */
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 26px;
+  background: linear-gradient(180deg, rgba(6, 14, 10, 0.62), rgba(6, 14, 10, 0.9));
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+.overlay.hidden,
+#loading.hidden { display: none; }
+
+.card {
+  width: 100%;
+  padding: 26px 22px 22px;
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(28, 46, 34, 0.96), rgba(16, 28, 21, 0.96));
+  border: 1px solid rgba(244, 234, 214, 0.12);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+  text-align: left;
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--sun);
+}
+
+.card h1 {
+  margin: 0 0 10px;
+  font-family: var(--font-display);
+  font-size: 36px;
+  line-height: 1.02;
+  letter-spacing: -0.01em;
+  font-weight: 700;
+}
+
+.card .body {
+  margin: 0 0 16px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--bone-dim);
+}
+
+#ov-stats { margin-bottom: 18px; }
+
+.stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(244, 234, 214, 0.09);
+  font-size: 13px;
+}
+
+.stat:last-child { border-bottom: none; }
+.stat span { color: var(--bone-dim); }
+.stat b { font-family: var(--font-display); font-size: 17px; letter-spacing: 0.01em; }
+
+.actions { display: flex; flex-direction: column; gap: 9px; }
+
+.btn {
+  appearance: none;
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 13px;
+  border: 1px solid rgba(244, 234, 214, 0.16);
+  background: rgba(244, 234, 214, 0.07);
+  color: var(--bone);
+  font-family: var(--font-display);
+  font-size: 16px;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: transform 0.09s ease, background 0.15s ease;
+}
+
+.btn:hover { background: rgba(244, 234, 214, 0.13); }
+.btn:active { transform: scale(0.985); }
+
+.btn-primary {
+  background: linear-gradient(180deg, var(--sun), #d99a2b);
+  border-color: rgba(0, 0, 0, 0.2);
+  color: #21160a;
+  font-weight: 700;
+}
+
+.btn-primary:hover { background: linear-gradient(180deg, #ffc659, #e0a230); }
+
+.btn:focus-visible,
+.tbtn:focus-visible,
+.sysbtn:focus-visible {
+  outline: 2px solid var(--moss);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------ thumb pads */
+#touch-controls {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;   /* only the buttons themselves take input */
+}
+
+.pad { position: absolute; display: flex; align-items: flex-end; gap: 10px; }
+.pad-left { left: 16px; bottom: 26px; }
+.pad-right { right: 16px; bottom: 26px; flex-direction: column; align-items: flex-end; }
+
+.tbtn {
+  pointer-events: auto;
+  width: 66px;
+  height: 66px;
+  padding: 0;
+  border-radius: 22px;
+  border: 1px solid rgba(244, 234, 214, 0.16);
+  background: rgba(12, 24, 17, 0.42);
+  color: var(--bone);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  cursor: pointer;
+  transition: background 0.1s ease, transform 0.08s ease;
+}
+
+.tbtn svg { width: 30px; height: 30px; fill: currentColor; }
+.tbtn.pressed { background: rgba(127, 196, 106, 0.34); transform: scale(0.94); }
+
+.tbtn-small { width: 54px; height: 54px; border-radius: 18px; opacity: 0.9; }
+.tbtn-small svg { width: 24px; height: 24px; }
+.tbtn-jump { width: 78px; height: 78px; border-radius: 26px; }
+.tbtn-jump svg { width: 34px; height: 34px; }
+
+/* -------------------------------------------------------- pause and sound */
+#system-buttons {
+  position: absolute;
+  left: 50%;
+  bottom: 26px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sysbtn {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(244, 234, 214, 0.14);
+  background: rgba(12, 24, 17, 0.42);
+  color: var(--bone-dim);
+  cursor: pointer;
+}
+
+.sysbtn svg { width: 20px; height: 20px; fill: currentColor; }
+.sysbtn:active { transform: scale(0.94); }
+.sysbtn .cross { display: none; }
+.sysbtn.off .wave { display: none; }
+.sysbtn.off .cross { display: block; }
+
+/* ----------------------------------------------------------------- loading */
+#loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 15px;
+  letter-spacing: 0.06em;
+  color: var(--bone-dim);
+  background: var(--bark-deep);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn, .tbtn, .sysbtn { transition: none; }
+}
+
+/* ------------------------------------------------------- leaderboard */
+.namerow { display: flex; gap: 8px; margin-bottom: 8px; }
+
+.nameinput {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 12px 13px;
+  border-radius: 12px;
+  border: 1px solid rgba(244, 234, 214, 0.18);
+  background: rgba(10, 20, 14, 0.55);
+  color: var(--bone);
+  font-family: var(--font-ui);
+  font-size: 15px;               /* 16px or above stops iOS zooming on focus */
+}
+
+.nameinput::placeholder { color: rgba(244, 234, 214, 0.38); }
+.nameinput:focus { outline: 2px solid var(--moss); outline-offset: 1px; }
+
+.btn-send { width: auto; flex: 0 0 auto; padding: 12px 15px; font-size: 14px; }
+.btn-send:disabled { opacity: 0.55; cursor: default; }
+
+.note { margin: 0 0 10px; font-size: 12px; line-height: 1.35; color: var(--sun); }
+
+.board-title {
+  margin: 14px 0 6px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--bone-dim);
+}
+
+.board {
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: var(--bone-dim);
+  max-height: 168px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.board-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(244, 234, 214, 0.07);
+}
+
+.board-row:last-child { border-bottom: none; }
+.board-row .rank { width: 22px; color: rgba(244, 234, 214, 0.4); font-variant-numeric: tabular-nums; }
+.board-row .who {
+  flex: 1 1 auto;
+  color: var(--bone);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;           /* a long name must not break the layout */
+}
+.board-row b { font-family: var(--font-display); color: var(--sun); font-variant-numeric: tabular-nums; }
+
+</style>
+</head>
+<body>
+
+<!-- The stage is a fixed 390x844 box (iPhone 12-17 logical viewport). It is
+     uniformly scaled by main.js to fit whatever window it lands in, so the
+     desktop build frames the action exactly like the phone build. -->
+<div id="stage">
+  <canvas id="game" width="390" height="844"></canvas>
+
+  <!-- ---------------------------------------------------- menus / results -->
+  <div id="overlay" class="overlay hidden">
+    <div class="card">
+      <p class="eyebrow" id="ov-eyebrow"></p>
+      <h1 id="ov-title"></h1>
+      <p class="body" id="ov-body"></p>
+      <div id="ov-stats"></div>
+      <div id="ov-submit"></div>
+      <div id="ov-board"></div>
+      <div class="actions" id="ov-actions"></div>
+    </div>
+  </div>
+
+  <!-- ------------------------------------------------ optional thumb pads -->
+  <div id="touch-controls">
+    <div class="pad pad-left">
+      <button class="tbtn" data-action="left" aria-label="Влево">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4 L7 12 L15 20 Z"/></svg>
+      </button>
+      <button class="tbtn" data-action="right" aria-label="Вправо">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4 L17 12 L9 20 Z"/></svg>
+      </button>
+    </div>
+    <div class="pad pad-right">
+      <button class="tbtn tbtn-small" data-action="slide" aria-label="Подкат">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9 L12 16 L19 9" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/><rect x="4" y="18" width="16" height="2.6" rx="1.3"/></svg>
+      </button>
+      <button class="tbtn tbtn-jump" data-action="jump" aria-label="Прыжок">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 14 L12 7 L19 14" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/><rect x="4" y="18" width="16" height="2.6" rx="1.3"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ------------------------------------------------------ pause / sound -->
+  <div id="system-buttons">
+    <button id="btn-pause" class="sysbtn" aria-label="Пауза">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="5" width="4" height="14" rx="1.4"/><rect x="13" y="5" width="4" height="14" rx="1.4"/></svg>
+    </button>
+    <button id="btn-mute" class="sysbtn" aria-label="Выключить звук">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9 h4 l5 -4 v14 l-5 -4 H4 Z"/><path class="wave" d="M16 9.5 a4 4 0 0 1 0 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path class="cross" d="M16.5 9.5 L21 14.5 M21 9.5 L16.5 14.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+
+  <div id="loading">Лес просыпается…</div>
+</div>
+
+<!-- Load order matters: each module reads the ones above it at define time.
+     Plain scripts (not ES modules) so the game also runs from a file:// URL
+     with no server and no build step. -->
+<script>
+/* ===== src/config.js ================================================= */
+/* =============================================================================
+ * config.js — ALL tunable numbers live here. No balance value is hardcoded
+ * anywhere else in the codebase. To re-balance the game, edit only this file.
+ *
+ * Unit system
+ *   world units : arbitrary 3D units; road.halfWidth is the reference scale
+ *   z           : distance along the track, in world units
+ *   offset      : lateral position in multiples of road.halfWidth, so
+ *                 -1 = left edge of the path, 0 = centre, +1 = right edge
+ *   meters      : cosmetic distance for score, = z / score.unitsPerMeter
+ * ========================================================================== */
+(function (FA) {
+  'use strict';
+
+  FA.CONFIG = {
+    /* ---------------------------------------------------------------- view */
+    view: {
+      // iPhone 12/13/14 logical viewport. 15/16/17 are 393x852 — close enough
+      // that we letterbox instead of reflowing. The stage is uniformly scaled
+      // to fit any window, so desktop gets the exact mobile framing.
+      designWidth: 390,
+      designHeight: 844,
+      maxDeltaMs: 250,       // clamp after a tab switch or breakpoint stall
+      fixedStep: 1 / 60,     // deterministic physics tick
+      maxSubSteps: 5,        // catch-up ceiling (prevents the spiral of death)
+      pixelRatioCap: 2       // don't render at 3x on Pro models — costs FPS
+    },
+
+    /* -------------------------------------------------------------- camera */
+    camera: {
+      height: 1800,          // eye height above the path
+      backZ: 900,            // how far behind the cat the camera sits
+      fieldOfView: 100,      // degrees
+      horizonRatio: 0.40,    // horizon line as a fraction of screen height
+      drawDistance: 180,     // segments rendered per frame
+      fogDensity: 4.2,       // higher = thicker forest haze
+      lateralFollow: 0.34,   // 0 = camera locked to centre, 1 = glued to cat
+      lateralLag: 6.0        // camera pan smoothing (higher = snappier)
+    },
+
+    /* ---------------------------------------------------------------- road */
+    road: {
+      segmentLength: 200,
+      halfWidth: 1200,
+      rumbleLength: 4,       // segments per colour band
+      totalSegments: 1200,   // the track is a ring; ~40 s per lap at base speed
+      curve: {               // the path is never straight for long
+        gentle: 1.6,
+        medium: 3.4,
+        sharp: 5.2,
+        straightRun: [14, 40],   // segments [min, max]
+        curveRun: [50, 130],
+        hillHeight: 260,
+        hillChance: 0.55
+      },
+      colors: {
+        light: { road: '#8a6a45', grass: '#2f5a33', rumble: '#c8a86a' },
+        dark:  { road: '#7d5f3d', grass: '#28502d', rumble: '#a98b52' }
+      }
+    },
+
+    /* -------------------------------------------------------------- player */
+    player: {
+      laneOffsets: [-0.62, 0, 0.62],
+      startLane: 1,
+      laneChangeSpeed: 4.2,      // offset units/sec (~0.3 s per lane)
+      jumpVelocity: 2600,        // world units/sec  -> apex ~600
+      gravity: 5600,             // world units/sec^2 -> airtime ~0.93 s
+      fastFallMultiplier: 2.4,   // slide input while airborne = slam down
+      standHeight: 560,          // hitbox height while running
+      slideHeight: 220,          // hitbox height while sliding
+      slideDuration: 0.62,
+      slideCooldown: 0.12,
+      hitboxHalfWidth: 0.16,     // narrower than the sprite = forgiving
+      maxHP: 3,
+      invulnerableAfterHit: 1.5, // i-frames + blink
+      hitSlowdown: 0.45,         // speed multiplier applied on impact
+      hitRecoverTime: 0.9
+    },
+
+    /* --------------------------------------------------------------- speed */
+    speed: {
+      base: 6000,                // world units/sec at level 1
+      levelStep: 0.10,           // +10% per level
+      maxMultiplier: 1.9,
+      rampUpTime: 1.2            // ease-in at level start
+    },
+
+    /* --------------------------------------------------------------- level */
+    level: {
+      durationSec: 150,          // "you run out of the forest" after this
+      count: 5,
+      introSec: 1.6,             // banner before the level clock starts
+      heartsRestoredOnClear: 1   // small mercy between levels
+    },
+
+    /* --------------------------------------------------------------- score */
+    score: {
+      unitsPerMeter: 250,
+      perMeter: 1,
+      pickup: { mushroom: 25, berry: 15, shrimp: 60 },
+      npcDeactivated: 250,
+      levelCompleteBonus: 500,
+      hpBonusPerHeart: 150,
+      comboStep: 0.1,            // +10% per pickup in a chain
+      comboMax: 3.0,
+      comboWindowSec: 2.0
+    },
+
+    /* --------------------------------------------------------------- spawn */
+    spawn: {
+      startSafeSegments: 90,     // grace zone at the start of a level
+      lookaheadSegments: 300,    // populate this far ahead (beyond draw range)
+      minGapSegments: 22,
+      gapJitter: 16,
+      difficultyRamp: 0.35,      // how much the level number tightens spacing
+      sceneryEvery: 3,
+      sceneryDensity: 0.85,
+      patternWeights: {
+        singleObstacle: 24,
+        doubleObstacle: 12,
+        lowBranch: 10,
+        pickupLine: 32,
+        pickupArc: 20,
+        npc: 22
+      }
+    },
+
+    /* ----------------------------------------------------- entity catalogue
+     * avoid : 'jump'  — clear it by jumping
+     *         'slide' — duck under it
+     *         'lane'  — too tall to jump, must change lane
+     * yBase : bottom of the hitbox above the path, in world units
+     * height: hitbox height (independent of the drawn sprite size)
+     */
+    obstacles: {
+      rock:   { sprite: 'rock',   avoid: 'jump',  halfWidth: 0.18, yBase: 0,   height: 300, worldW: 420,  worldH: 340 },
+      log:    { sprite: 'log',    avoid: 'jump',  halfWidth: 0.30, yBase: 0,   height: 240, worldW: 760,  worldH: 280 },
+      branch: { sprite: 'branch', avoid: 'slide', halfWidth: 0.52, yBase: 380, height: 420, worldW: 1250, worldH: 520 },
+      stump:  { sprite: 'stump',  avoid: 'jump',  halfWidth: 0.20, yBase: 0,   height: 300, worldW: 460,  worldH: 380 },
+      bush:   { sprite: 'bush',   avoid: 'jump',  halfWidth: 0.24, yBase: 0,   height: 320, worldW: 620,  worldH: 400 }
+    },
+
+    pickups: {
+      mushroom: { sprite: 'mushroom', halfWidth: 0.30, yBase: 40,  height: 340, worldW: 400, worldH: 400 },
+      berry:    { sprite: 'berry',    halfWidth: 0.30, yBase: 40,  height: 320, worldW: 380, worldH: 380 },
+      shrimp:   { sprite: 'shrimp',   halfWidth: 0.30, yBase: 300, height: 320, worldW: 460, worldH: 380 }
+    },
+
+    /* ----------------------------------------------------------------- NPC */
+    npc: {
+      types: {
+        bear:     { sprite: 'bear',     worldW: 900, worldH: 950,  drops: ['honey', 'rock_small'], dropIntervalSec: [1.4, 2.2], tapsToStop: 3 },
+        moose:    { sprite: 'moose',    worldW: 980, worldH: 1080, drops: ['rock_small'],          dropIntervalSec: [1.7, 2.6], tapsToStop: 3 },
+        squirrel: { sprite: 'squirrel', worldW: 500, worldH: 540,  drops: ['slime', 'rock_small'], dropIntervalSec: [1.1, 1.8], tapsToStop: 3 }
+      },
+      sideOffsets: [-1.25, 1.25],      // which verge an animal walks in from
+      crossRange: 1.15,                // how far across the path they wander
+      crossSpeed: [0.34, 0.62],        // lateral speed, in offset units/sec
+      dropFromOwnLane: true,           // drop into the lane they are standing in
+      activeRangeSegments: [40, 170],  // they only throw inside this window
+      dropLeadSegments: [30, 70],      // hazards land this far in front of them
+      tapPaddingPx: 26,                // finger-friendly padding on the tap box
+      tapCooldownSec: 0.10,            // one press must not register as three
+      hitFlashSec: 0.18,
+      deactivateFadeSec: 0.9
+    },
+
+    /* ------------------------------------------------------------- hazards */
+    hazards: {
+      rock_small: { sprite: 'rock_small', avoid: 'jump', halfWidth: 0.17, yBase: 0, height: 260, worldW: 340, worldH: 300, lifeSec: 9 },
+      slime:      { sprite: 'slime',      avoid: 'jump', halfWidth: 0.22, yBase: 0, height: 170, worldW: 430, worldH: 200, lifeSec: 9 },
+      honey:      { sprite: 'honey',      avoid: 'lane', halfWidth: 0.20, yBase: 0, height: 900, worldW: 380, worldH: 430, lifeSec: 9 }
+    },
+    hazardDrop: {
+      startHeight: 2200,
+      gravity: 4200,
+      spinRate: 5.0,
+      splashSec: 0.25
+    },
+
+    /* --------------------------------------------------------------- input */
+    input: {
+      swipeMinPx: 26,            // travel before a touch counts as a swipe
+      swipeMaxTimeMs: 600,
+      tapMaxPx: 18,              // movement budget for a touch to stay a tap
+      tapMaxTimeMs: 260,
+      jumpBufferSec: 0.14,       // a press just before landing still jumps
+      doubleTapSlide: false,     // true = double-tap slides (adds tap latency)
+      doubleTapMs: 240,
+      showTouchButtons: 'auto'   // 'auto' | true | false
+    },
+
+    /* --------------------------------------------------------------- audio */
+    audio: { enabled: true, masterVolume: 0.32 },
+
+    /* -------------------------------------------------------------- assets */
+    assets: {
+      // Flip to true once real PNGs are in ./assets/ (see ASSETS_SPEC.md).
+      // While false, the game runs entirely on procedural placeholders.
+      useExternal: false,
+      basePath: 'assets/',
+      // Frame counts and sizes are the contract for external art. The
+      // placeholder generator emits sheets with exactly this layout.
+      manifest: {
+        cat_run:    { file: 'cat_run.png',    frameW: 96,  frameH: 96,  frames: 6, fps: 16 },
+        cat_jump:   { file: 'cat_jump.png',   frameW: 96,  frameH: 96,  frames: 2, fps: 6 },
+        cat_slide:  { file: 'cat_slide.png',  frameW: 96,  frameH: 64,  frames: 2, fps: 8 },
+        cat_hit:    { file: 'cat_hit.png',    frameW: 96,  frameH: 96,  frames: 1 },
+        rock:       { file: 'rock.png',       frameW: 64,  frameH: 64,  frames: 1 },
+        rock_small: { file: 'rock_small.png', frameW: 48,  frameH: 48,  frames: 1 },
+        log:        { file: 'log.png',        frameW: 128, frameH: 48,  frames: 1 },
+        branch:     { file: 'branch.png',     frameW: 192, frameH: 80,  frames: 1 },
+        stump:      { file: 'stump.png',      frameW: 64,  frameH: 96,  frames: 1 },
+        bush:       { file: 'bush.png',       frameW: 80,  frameH: 88,  frames: 1 },
+        mushroom:   { file: 'mushroom.png',   frameW: 48,  frameH: 48,  frames: 1 },
+        berry:      { file: 'berry.png',      frameW: 48,  frameH: 48,  frames: 1 },
+        shrimp:     { file: 'shrimp.png',     frameW: 48,  frameH: 40,  frames: 1 },
+        slime:      { file: 'slime.png',      frameW: 64,  frameH: 32,  frames: 1 },
+        honey:      { file: 'honey.png',      frameW: 56,  frameH: 64,  frames: 1 },
+        bear:       { file: 'bear.png',       frameW: 112, frameH: 120, frames: 2, fps: 4 },
+        moose:      { file: 'moose.png',      frameW: 120, frameH: 132, frames: 2, fps: 4 },
+        squirrel:   { file: 'squirrel.png',   frameW: 64,  frameH: 72,  frames: 2, fps: 6 },
+        tree_pine:  { file: 'tree_pine.png',  frameW: 128, frameH: 224, frames: 1 },
+        tree_oak:   { file: 'tree_oak.png',   frameW: 144, frameH: 192, frames: 1 },
+        fern:       { file: 'fern.png',       frameW: 72,  frameH: 64,  frames: 1 }
+      }
+    },
+
+    /* how large the cat draws on the path, in world units */
+    playerSprite: { worldW: 620, worldH: 620, slideW: 700, slideH: 420 },
+
+    /* ------------------------------------------------------------- scenery */
+    scenery: {
+      types: [
+        { sprite: 'tree_pine', worldW: 1500, worldH: 2600, weight: 42 },
+        { sprite: 'tree_oak',  worldW: 1700, worldH: 2200, weight: 30 },
+        { sprite: 'bush',      worldW: 700,  worldH: 780,  weight: 16 },
+        { sprite: 'fern',      worldW: 620,  worldH: 520,  weight: 12 }
+      ],
+      minOffset: 1.35,
+      maxOffset: 4.2
+    },
+
+    /* --------------------------------------------------------------- debug */
+    /* ---------------------------------------------------------------------
+     * LEADERBOARD
+     * Leave url/anonKey blank and the game runs local-only: personal best
+     * still works, the shared board simply isn't offered. Setup SQL and the
+     * row-level-security policies are in LEADERBOARD.md.
+     * ------------------------------------------------------------------ */
+    leaderboard: {
+      enabled: true,
+      url: 'https://ummuqgqldzypwcahikug.supabase.co',                 // https://YOUR-PROJECT.supabase.co
+      anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVtbXVxZ3FsZHp5cHdjYWhpa3VnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU5NTQ4ODksImV4cCI6MjEwMTUzMDg4OX0.rwbHtmcVay2vcoK4u3z0eKHYZiY9DMZjY1Q0U6RUdGQ',             // the public anon key — safe in a static page
+      table: 'scores',
+      topCount: 10,
+      nameMaxLength: 12,
+      timeoutMs: 6000          // a slow board must never stall the UI
+    },
+
+    debug: {
+      showFPS: false,
+      showHitboxes: false,
+      labelPlaceholders: false,   // stamp the sprite key on placeholder art
+      invincible: false,
+      seed: 20260805
+    }
+  };
+})(window.FA = window.FA || {});
+
+/* ===== src/strings.js ================================================ */
+/* =============================================================================
+ * strings.js — every word the player reads, in one place.
+ *
+ * Kept out of the systems so the game can be re-languaged by editing one file.
+ * Anything with a {token} is filled in by the caller.
+ *
+ * Current language: Russian (ru).
+ * ========================================================================== */
+(function (FA) {
+  'use strict';
+
+  FA.STR = {
+    lang: 'ru',
+
+    /* ---- the game itself */
+    gameTitle: 'Фаня в лесу',
+    loading: 'Лес просыпается…',
+
+    /* ---- level names, one per level */
+    levels: ['Опушка', 'Ельник', 'Овраг', 'Чаща', 'Бурелом'],
+
+    /* ---- HUD */
+    hudLevel: 'УРОВЕНЬ {level} / {count}',
+    hudTimeLeft: 'ДО ВЫХОДА {time}',
+    hudChain: 'x{combo} подряд',
+    hudFps: '{fps} кадр/с',
+    introLevel: 'УРОВЕНЬ {level}',
+    introHint: 'Свайп — движение · нажимай на зверей',
+
+    /* ---- title screen */
+    titleEyebrow: 'Пять лесов. Один кот.',
+    titleBody: 'Свайп влево и вправо — смена дорожки, свайп вверх — прыжок, ' +
+               'свайп вниз — подкат. Нажми на зверя три раза, чтобы прогнать его. ' +
+               'Беги, пока не выйдешь на свет.',
+    titleBodyDesktop: 'Стрелки или A/D — смена дорожки, ↑ или пробел — прыжок, ' +
+                      '↓ — подкат. Кликай по зверям — три попадания, и зверь уходит. ' +
+                      'Беги, пока не выйдешь на свет.',
+    start: 'Начать забег',
+
+    /* ---- pause */
+    pausedEyebrow: 'Уровень {level}',
+    paused: 'Пауза',
+    pausedBody: 'Лес подождёт.',
+    resume: 'Продолжить',
+    restartLevel: 'Начать уровень заново',
+
+    /* ---- level complete */
+    levelCompleteTitle: 'Из-за деревьев',
+    levelCompleteBody: 'Ненадолго — свет. Тропа уходит дальше.',
+    nextLevel: 'В следующий лес',
+
+    /* ---- game over */
+    gameOverEyebrow: 'Уровень {level} — {name}',
+    gameOverTitle: 'Лес победил',
+    gameOverBody: 'Три удара — и забег окончен. Ничего, бывает.',
+    runAgain: 'Ещё раз',
+
+    /* ---- victory */
+    victoryEyebrow: 'Все леса пройдены: {count}',
+    victoryTitle: 'На свет',
+    victoryBody: 'Деревья редеют, шум стихает, и тропа выходит на открытый луг.',
+    victoryAgain: 'Пробежать заново',
+
+    /* ---- stat rows */
+    statScore: 'Очки',
+    statBest: 'Рекорд',
+    statTimeLeft: 'Осталось времени',
+    statBonus: 'Бонус за уровень',
+    statDistance: 'Дистанция',
+    statAnimals: 'Зверей прогнано',
+    metres: '{n} м',
+
+    /* ---- leaderboard */
+    boardTitle: 'Таблица рекордов',
+    boardLoading: 'Загружаем таблицу…',
+    boardEmpty: 'Пока пусто — будь первым.',
+    boardOffline: 'Таблица недоступна.',
+    localBest: 'Личный рекорд',
+    newBest: 'Новый личный рекорд!',
+    namePlaceholder: 'Твоё имя',
+    submitScore: 'Отправить результат',
+    submitting: 'Отправляем…',
+    submitted: 'Результат отправлен',
+    submitFailed: 'Не удалось отправить. Результат сохранён локально.',
+    nameRequired: 'Введи имя',
+
+    /* ---- floating popups */
+    tapsRemaining: 'ещё {n}',
+
+    /* ---- accessibility labels on the on-screen buttons */
+    a11yLeft: 'Влево',
+    a11yRight: 'Вправо',
+    a11yJump: 'Прыжок',
+    a11ySlide: 'Подкат',
+    a11yPause: 'Пауза',
+    a11yMute: 'Выключить звук',
+    a11yUnmute: 'Включить звук'
+  };
+
+  /** Fill {tokens} from an object: t('hudLevel', {level: 2, count: 5}). */
+  FA.t = function (key, vars) {
+    var s = FA.STR[key];
+    if (s === undefined) return key;          // visible failure, not a blank
+    if (!vars) return s;
+    return s.replace(/\{(\w+)\}/g, function (m, name) {
+      return vars[name] === undefined ? m : vars[name];
+    });
+  };
+})(window.FA = window.FA || {});
+
+/* ===== src/utils.js ================================================== */
+/* =============================================================================
+ * utils.js — tiny dependency-free helpers. No DOM, no game logic, no state.
+ * ========================================================================== */
+(function (FA) {
+  'use strict';
+
+  var U = {
+    clamp: function (v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); },
+
+    lerp: function (a, b, t) { return a + (b - a) * t; },
+
+    /** Frame-rate independent exponential smoothing (lambda = speed). */
+    damp: function (a, b, lambda, dt) {
+      return a + (b - a) * (1 - Math.exp(-lambda * dt));
+    },
+
+    easeIn:    function (t) { return t * t; },
+    easeOut:   function (t) { return 1 - (1 - t) * (1 - t); },
+    easeInOut: function (t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; },
+
+    /** Advance `v` by `dv`, wrapping into [0, max). Handles negative dv. */
+    wrap: function (v, dv, max) {
+      var r = v + dv;
+      while (r >= max) r -= max;
+      while (r < 0) r += max;
+      return r;
+    },
+
+    /** How far through a `total`-sized cell the value `n` sits, as 0..1. */
+    percentRemaining: function (n, total) {
+      return (n % total) / total;
+    },
+
+    /** Exponential distance fog. 1 = clear, 0 = fully fogged out. */
+    fog: function (distance, density) {
+      return 1 / Math.pow(Math.E, distance * distance * density);
+    },
+
+    overlap1D: function (aMin, aMax, bMin, bMax) {
+      return aMin < bMax && bMin < aMax;
+    },
+
+    formatTime: function (seconds) {
+      var s = Math.max(0, Math.ceil(seconds));
+      var m = Math.floor(s / 60);
+      var r = s % 60;
+      return m + ':' + (r < 10 ? '0' : '') + r;
+    },
+
+    formatScore: function (n) {
+      return Math.floor(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    },
+
+    /**
+     * Mulberry32 — small, fast, seedable PRNG. Seeded generation means a level
+     * plays identically on every device, so "level 3 is unfair at 0:40" is a
+     * reproducible bug report rather than a ghost story.
+     */
+    createRNG: function (seed) {
+      var s = seed >>> 0;
+      function next() {
+        s |= 0; s = (s + 0x6D2B79F5) | 0;
+        var t = Math.imul(s ^ (s >>> 15), 1 | s);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      }
+      return {
+        next: next,
+        range: function (lo, hi) { return lo + next() * (hi - lo); },
+        int: function (lo, hi) { return Math.floor(lo + next() * (hi - lo + 1)); },
+        pick: function (arr) { return arr[Math.floor(next() * arr.length)]; },
+        chance: function (p) { return next() < p; },
+        /** Weighted pick from a {key: weight} map. Returns the key. */
+        weighted: function (table) {
+          var keys = Object.keys(table);
+          var i, total = 0, r;
+          for (i = 0; i < keys.length; i++) total += table[keys[i]];
+          r = next() * total;
+          for (i = 0; i < keys.length; i++) {
+            r -= table[keys[i]];
+            if (r <= 0) return keys[i];
+          }
+          return keys[keys.length - 1];
+        }
+      };
+    }
+  };
+
+  FA.Utils = U;
+
+  /* Typography. No webfonts — the game has to run offline straight off disk —
+   * so these stacks resolve to something with character on the stated dev
+   * target (macOS/iOS) and degrade sanely everywhere else. */
+  FA.FONT_DISPLAY = '"Avenir Next Condensed", "Futura", "Trebuchet MS", "Segoe UI", system-ui, sans-serif';
+  FA.FONT_UI = '"Avenir Next", "Trebuchet MS", "Segoe UI", system-ui, sans-serif';
+})(window.FA = window.FA || {});
+
+/* ===== src/scores.js ================================================= */
+/* =============================================================================
+ * scores.js — personal best (local) and the shared leaderboard (remote).
+ *
+ * Two independent layers, deliberately:
+ *
+ *   LOCAL  — localStorage. Always on, works offline, needs no configuration.
+ *            This is what the "Рекорд" line on the results screen reads.
+ *   REMOTE — a Supabase table over its REST endpoint. Optional. If it is not
+ *            configured, is unreachable, or times out, the game carries on with
+ *            the local layer and says so. A leaderboard is never allowed to
+ *            block play.
+ *
+ * Configure in config.js -> leaderboard. Setup SQL is in LEADERBOARD.md.
+ * ========================================================================== */
+(function (FA) {
+  'use strict';
+
+  var CONFIG = FA.CONFIG;
+  var LB = CONFIG.leaderboard;
+  var KEY_BEST = 'fanya.best';
+  var KEY_NAME = 'fanya.name';
+
+  var localBest = 0;
+  var playerName = '';
+
+  /* ------------------------------------------------------------------ local */
+  // Safari in private mode throws on localStorage access rather than returning
+  // null, so every touch is wrapped.
+  function readStore(key) {
+    try {
+      return (typeof localStorage !== 'undefined') ? localStorage.getItem(key) : null;
+    } catch (e) { return null; }
+  }
+
+  function writeStore(key, value) {
+    try {
+      if (typeof localStorage !== 'undefined') localStorage.setItem(key, value);
+    } catch (e) { /* storage full or blocked: the run still counts in memory */ }
+  }
+
+  function sanitizeName(raw) {
+    // Cyrillic is the point here — the UI is Russian, so a Latin-only filter
+    // would be actively hostile. Allow letters, digits, spaces and a few marks.
+    var s = String(raw || '')
+      .replace(/[\u0000-\u001f\u007f-\u009f]/g, '')   // control characters
+      .replace(/\s+/g, ' ')
+      .trim();
+    return s.slice(0, LB.nameMaxLength);
+  }
+
+  /* ----------------------------------------------------------------- remote */
+  function remoteConfigured() {
+    return !!(LB.enabled && LB.url && LB.anonKey && typeof fetch === 'function');
+  }
+
+  function endpoint(query) {
+    return LB.url.replace(/\/+$/, '') + '/rest/v1/' + LB.table + (query || '');
+  }
+
+  function headers(extra) {
+    var h = {
+      apikey: LB.anonKey,
+      Authorization: 'Bearer ' + LB.anonKey,
+      'Content-Type': 'application/json'
+    };
+    for (var k in extra) h[k] = extra[k];
+    return h;
+  }
+
+  /** fetch with a hard timeout: a hanging board must not hang the UI. */
+  function timedFetch(url, options) {
+    var controller = (typeof AbortController === 'function') ? new AbortController() : null;
+    var opts = options || {};
+    if (controller) opts.signal = controller.signal;
+    var timer = setTimeout(function () { if (controller) controller.abort(); }, LB.timeoutMs);
+    return fetch(url, opts).then(function (res) {
+      clearTimeout(timer);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res;
+    }, function (err) {
+      clearTimeout(timer);
+      throw err;
+    });
+  }
+
+  var Scores = {
+    init: function () {
+      var best = parseInt(readStore(KEY_BEST), 10);
+      localBest = isNaN(best) ? 0 : Math.max(0, best);
+      playerName = sanitizeName(readStore(KEY_NAME));
+      return localBest;
+    },
+
+    localBest: function () { return localBest; },
+
+    playerName: function () { return playerName; },
+
+    setPlayerName: function (raw) {
+      playerName = sanitizeName(raw);
+      writeStore(KEY_NAME, playerName);
+      return playerName;
+    },
+
+    /** Called when a run ends. Returns true if it beat the stored best. */
+    noteRun: function (score) {
+      var s = Math.floor(score) || 0;
+      if (s <= localBest) return false;
+      localBest = s;
+      writeStore(KEY_BEST, String(localBest));
+      return true;
+    },
+
+    isRemoteEnabled: remoteConfigured,
+
+    /**
+     * Push one result. Resolves on success, rejects on any failure — the
+     * caller decides what to tell the player.
+     */
+    submit: function (entry) {
+      if (!remoteConfigured()) return Promise.reject(new Error('leaderboard not configured'));
+      var name = sanitizeName(entry.name);
+      if (!name) return Promise.reject(new Error('empty name'));
+      var body = {
+        name: name,
+        score: Math.max(0, Math.floor(entry.score) || 0),
+        level: Math.max(1, Math.floor(entry.level) || 1),
+        distance: Math.max(0, Math.floor(entry.distance) || 0),
+        animals: Math.max(0, Math.floor(entry.animals) || 0)
+      };
+      return timedFetch(endpoint(), {
+        method: 'POST',
+        headers: headers({ Prefer: 'return=minimal' }),
+        body: JSON.stringify(body)
+      }).then(function () { return body; });
+    },
+
+    /** Top scores, best first. Rejects if the board is unavailable. */
+    top: function (limit) {
+      if (!remoteConfigured()) return Promise.reject(new Error('leaderboard not configured'));
+      var n = limit || LB.topCount;
+      var q = '?select=name,score,level,distance,created_at&order=score.desc&limit=' + n;
+      return timedFetch(endpoint(q), { method: 'GET', headers: headers() })
+        .then(function (res) { return res.json(); })
+        .then(function (rows) { return Array.isArray(rows) ? rows : []; });
+    },
+
+    sanitizeName: sanitizeName
+  };
+
+  FA.Scores = Scores;
+})(window.FA = window.FA || {});
+
+/* ===== src/placeholders.js =========================================== */
+/* =============================================================================
+ * placeholders.js — procedural stand-in art.
+ *
+ * Every sprite key in CONFIG.assets.manifest has a painter here. Painters draw
+ * into a frame-sized box with the *anchor at bottom-centre*, which is the same
+ * contract external PNGs must honour (see ASSETS_SPEC.md). That makes swapping
+ * placeholder art for real art a one-line config flip with zero code churn.
+ *
+ * Painter signature: paint(ctx, w, h, frame, frames)
+ * ========================================================================== */
+(function (FA) {
+  'use strict';
+
+  /* ------------------------------------------------------------- primitives */
+  function ellipse(ctx, cx, cy, rx, ry, fill) {
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, Math.abs(rx), Math.abs(ry), 0, 0, Math.PI * 2);
+    ctx.fillStyle = fill;
+    ctx.fill();
+  }
+
+  function roundRect(ctx, x, y, w, h, r, fill) {
+    var rr = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + rr, y);
+    ctx.arcTo(x + w, y, x + w, y + h, rr);
+    ctx.arcTo(x + w, y + h, x, y + h, rr);
+    ctx.arcTo(x, y + h, x, y, rr);
+    ctx.arcTo(x, y, x + w, y, rr);
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+  }
+
+  function poly(ctx, pts, fill) {
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (var i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+  }
+
+  function stroke(ctx, color, width) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+  }
+
+  /* ------------------------------------------------------------------ theme */
+  var C = {
+    catMid:   '#7d4622',   // chestnut — the base coat
+    catDark:  '#4a2e1d',   // dark chocolate — markings, legs, tail bands
+    catLight: '#e0bb92',   // pale fawn — muzzle, belly, tail tip, patches
+    catPink:  '#c08b78',   // muted rose, inner ear
+    bear: '#7d5433', bearDark: '#5f3d24', bearMuzzle: '#c39a6b',
+    moose: '#5d4630', mooseDark: '#41301f', antler: '#cbb894',
+    squirrel: '#98a0a8', squirrelDark: '#6f777f', squirrelBelly: '#e2e6ea',
+    wood: '#7a5638', woodDark: '#573c26', woodRing: '#a17a51',
+    rock: '#8d9298', rockLight: '#b3b8be', rockDark: '#63686e',
+    leaf: '#3f7a3c', leafDark: '#2c5a2c', leafLight: '#5fa04f',
+    mushCap: '#d2463f', mushStem: '#f3e4c8',
+    berry: '#6f4bb0', berryDark: '#4e3383',
+    shrimp: '#f08a6e', shrimpDark: '#d1614a',
+    slime: '#79c04a', slimeDark: '#4f8f2c',
+    honey: '#d99a2b', honeyDark: '#a9701a', honeyPot: '#b06a3c',
+    eye: '#2a2320', dust: '#cbb08a'
+  };
+
+  /* --------------------------------------------------------------------- cat
+   * Back view: the camera rides behind the cat, so the silhouette is spine,
+   * ears and tail. The tail is the main readability cue at small sizes.
+   */
+  function catBase(ctx, w, h, bob, legPhase, tailSway) {
+    var cx = w / 2, ground = h * 0.97;
+
+    ctx.beginPath();
+    ctx.moveTo(cx, ground - h * 0.34);
+    ctx.quadraticCurveTo(cx + tailSway * w * 0.30, ground - h * 0.62,
+                         cx + tailSway * w * 0.42, ground - h * 0.86);
+    stroke(ctx, C.catMid, h * 0.10);
+    ctx.beginPath();
+    ctx.moveTo(cx + tailSway * w * 0.34, ground - h * 0.74);
+    ctx.quadraticCurveTo(cx + tailSway * w * 0.40, ground - h * 0.80,
+                         cx + tailSway * w * 0.42, ground - h * 0.86);
+    stroke(ctx, C.catLight, h * 0.085);
+    ctx.beginPath();
+    ctx.moveTo(cx + tailSway * w * 0.22, ground - h * 0.53);
+    ctx.quadraticCurveTo(cx + tailSway * w * 0.30, ground - h * 0.60,
+                         cx + tailSway * w * 0.33, ground - h * 0.68);
+    stroke(ctx, C.catDark, h * 0.095);
+
+    var lift = legPhase * h * 0.07;
+    roundRect(ctx, cx - w * 0.27, ground - h * 0.14 - Math.max(0, lift), w * 0.19, h * 0.15, w * 0.07, C.catDark);
+    roundRect(ctx, cx + w * 0.08, ground - h * 0.14 - Math.max(0, -lift), w * 0.19, h * 0.15, w * 0.07, C.catDark);
+
+    ellipse(ctx, cx, ground - h * 0.30 + bob, w * 0.28, h * 0.24, C.catMid);
+
+    // Tortoiseshell patching. Clipped to the body so the patches read as coat
+    // markings rather than as blobs, and deliberately asymmetric — a
+    // three-coloured cat is never mirrored down the spine.
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(cx, ground - h * 0.30 + bob, w * 0.28, h * 0.24, 0, 0, Math.PI * 2);
+    ctx.clip();
+    ellipse(ctx, cx - w * 0.18, ground - h * 0.24 + bob, w * 0.16, h * 0.16, C.catLight);
+    ellipse(ctx, cx + w * 0.16, ground - h * 0.37 + bob, w * 0.15, h * 0.14, C.catDark);
+    ellipse(ctx, cx + w * 0.06, ground - h * 0.17 + bob, w * 0.11, h * 0.09, C.catLight);
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha = 0.85;
+    for (var i = 0; i < 3; i++) {
+      var y = ground - h * 0.42 + bob + i * h * 0.10;
+      ctx.beginPath();
+      ctx.moveTo(cx - w * 0.16, y);
+      ctx.quadraticCurveTo(cx, y - h * 0.035, cx + w * 0.16, y);
+      stroke(ctx, C.catDark, h * 0.035);
+    }
+    ctx.restore();
+
+    var hy = ground - h * 0.60 + bob * 1.3;
+    poly(ctx, [[cx - w * 0.20, hy - h * 0.04], [cx - w * 0.11, hy - h * 0.22], [cx - w * 0.03, hy - h * 0.05]], C.catMid);
+    poly(ctx, [[cx + w * 0.03, hy - h * 0.05], [cx + w * 0.11, hy - h * 0.22], [cx + w * 0.20, hy - h * 0.04]], C.catDark);
+    poly(ctx, [[cx - w * 0.16, hy - h * 0.05], [cx - w * 0.11, hy - h * 0.17], [cx - w * 0.06, hy - h * 0.06]], C.catPink);
+    poly(ctx, [[cx + w * 0.06, hy - h * 0.06], [cx + w * 0.11, hy - h * 0.17], [cx + w * 0.16, hy - h * 0.05]], C.catPink);
+    ellipse(ctx, cx, hy, w * 0.19, h * 0.16, C.catMid);
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(cx, hy, w * 0.19, h * 0.16, 0, 0, Math.PI * 2);
+    ctx.clip();
+    ellipse(ctx, cx + w * 0.11, hy - h * 0.02, w * 0.11, h * 0.12, C.catDark);
+    ctx.restore();
+    ellipse(ctx, cx, hy + h * 0.02, w * 0.11, h * 0.08, C.catLight);
+  }
+
+  var PAINTERS = {
+    cat_run: function (ctx, w, h, f, n) {
+      var t = (f / n) * Math.PI * 2;
+      catBase(ctx, w, h, Math.sin(t * 2) * h * 0.02, Math.sin(t), Math.sin(t * 0.5));
+    },
+
+    cat_jump: function (ctx, w, h, f) {
+      var reach = f === 0 ? -1 : 1;          // 0 = rising, 1 = falling
+      catBase(ctx, w, h, -h * 0.04, reach * 0.9, -0.9);
+      var cx = w / 2, ground = h * 0.97;
+      roundRect(ctx, cx - w * 0.34, ground - h * 0.30, w * 0.16, h * 0.10, w * 0.06, C.catDark);
+      roundRect(ctx, cx + w * 0.18, ground - h * 0.30, w * 0.16, h * 0.10, w * 0.06, C.catDark);
+    },
+
+    cat_slide: function (ctx, w, h, f) {
+      var cx = w / 2, ground = h * 0.94, squash = f === 0 ? 1 : 0.94;
+      ctx.globalAlpha = 0.5;
+      ellipse(ctx, cx - w * 0.30, ground - h * 0.06, w * 0.16, h * 0.10, C.dust);
+      ellipse(ctx, cx + w * 0.30, ground - h * 0.04, w * 0.12, h * 0.08, C.dust);
+      ctx.globalAlpha = 1;
+      ctx.beginPath();
+      ctx.moveTo(cx - w * 0.10, ground - h * 0.30 * squash);
+      ctx.quadraticCurveTo(cx - w * 0.52, ground - h * 0.40, cx - w * 0.46, ground - h * 0.66);
+      stroke(ctx, C.catMid, h * 0.10);
+      ellipse(ctx, cx, ground - h * 0.22 * squash, w * 0.34, h * 0.20 * squash, C.catMid);
+      ctx.save();
+      ctx.beginPath();
+      ctx.ellipse(cx, ground - h * 0.22 * squash, w * 0.34, h * 0.20 * squash, 0, 0, Math.PI * 2);
+      ctx.clip();
+      ellipse(ctx, cx - w * 0.16, ground - h * 0.26 * squash, w * 0.16, h * 0.12, C.catDark);
+      ellipse(ctx, cx + w * 0.14, ground - h * 0.18 * squash, w * 0.13, h * 0.10, C.catLight);
+      ctx.restore();
+      ellipse(ctx, cx + w * 0.10, ground - h * 0.30 * squash, w * 0.19, h * 0.15, C.catMid);
+      poly(ctx, [[cx - w * 0.02, ground - h * 0.38], [cx + w * 0.04, ground - h * 0.54], [cx + w * 0.12, ground - h * 0.39]], C.catMid);
+      poly(ctx, [[cx + w * 0.14, ground - h * 0.39], [cx + w * 0.22, ground - h * 0.52], [cx + w * 0.27, ground - h * 0.36]], C.catDark);
+      ellipse(ctx, cx - w * 0.06, ground - h * 0.14, w * 0.20, h * 0.08, C.catLight);
+    },
+
+    cat_hit: function (ctx, w, h) {
+      ctx.save();
+      ctx.translate(w / 2, h * 0.97);
+      ctx.rotate(-0.22);
+      ctx.translate(-w / 2, -h * 0.97);
+      catBase(ctx, w, h, h * 0.03, 0.4, 1.1);
+      ctx.restore();
+      ctx.globalAlpha = 0.9;
+      for (var i = 0; i < 3; i++) {
+        var a = -0.6 + i * 0.6;
+        ellipse(ctx, w / 2 + Math.cos(a) * w * 0.34, h * 0.20 + Math.sin(a) * h * 0.06, w * 0.045, w * 0.045, '#ffe08a');
+      }
+      ctx.globalAlpha = 1;
+    },
+
+    /* ------------------------------------------------------------ obstacles */
+    rock: function (ctx, w, h) {
+      var g = h * 0.98;
+      poly(ctx, [[w * 0.06, g], [w * 0.16, g - h * 0.52], [w * 0.42, g - h * 0.80],
+                 [w * 0.72, g - h * 0.66], [w * 0.94, g - h * 0.22], [w * 0.86, g]], C.rock);
+      poly(ctx, [[w * 0.16, g - h * 0.52], [w * 0.42, g - h * 0.80], [w * 0.58, g - h * 0.48], [w * 0.30, g - h * 0.36]], C.rockLight);
+      poly(ctx, [[w * 0.58, g - h * 0.48], [w * 0.72, g - h * 0.66], [w * 0.94, g - h * 0.22], [w * 0.72, g - h * 0.20]], C.rockDark);
+    },
+
+    rock_small: function (ctx, w, h) {
+      var g = h * 0.98;
+      poly(ctx, [[w * 0.12, g], [w * 0.20, g - h * 0.46], [w * 0.50, g - h * 0.70],
+                 [w * 0.84, g - h * 0.34], [w * 0.80, g]], C.rock);
+      poly(ctx, [[w * 0.20, g - h * 0.46], [w * 0.50, g - h * 0.70], [w * 0.56, g - h * 0.40], [w * 0.32, g - h * 0.32]], C.rockLight);
+    },
+
+    log: function (ctx, w, h) {
+      var g = h * 0.96, top = g - h * 0.72;
+      roundRect(ctx, w * 0.04, top, w * 0.92, h * 0.72, h * 0.34, C.wood);
+      ellipse(ctx, w * 0.10, top + h * 0.36, w * 0.075, h * 0.35, C.woodRing);
+      ellipse(ctx, w * 0.10, top + h * 0.36, w * 0.040, h * 0.19, C.woodDark);
+      ctx.globalAlpha = 0.45;
+      for (var i = 0; i < 3; i++) {
+        ctx.beginPath();
+        ctx.moveTo(w * 0.22, top + h * (0.20 + i * 0.20));
+        ctx.lineTo(w * 0.88, top + h * (0.24 + i * 0.20));
+        stroke(ctx, C.woodDark, h * 0.05);
+      }
+      ctx.globalAlpha = 1;
+    },
+
+    branch: function (ctx, w, h) {
+      ctx.beginPath();
+      ctx.moveTo(0, h * 0.34);
+      ctx.quadraticCurveTo(w * 0.5, h * 0.16, w, h * 0.34);
+      stroke(ctx, C.wood, h * 0.16);
+      for (var i = 0; i < 7; i++) {
+        var x = w * (0.08 + i * 0.14), y = h * (0.30 + (i % 2) * 0.05);
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x, y + h * 0.16);
+        stroke(ctx, C.woodDark, h * 0.03);
+        ellipse(ctx, x, y + h * 0.24, w * 0.055, h * 0.18, i % 2 ? C.leaf : C.leafDark);
+      }
+      ellipse(ctx, w * 0.30, h * 0.22, w * 0.10, h * 0.14, C.leafLight);
+      ellipse(ctx, w * 0.66, h * 0.20, w * 0.09, h * 0.13, C.leaf);
+    },
+
+    stump: function (ctx, w, h) {
+      var g = h * 0.97;
+      poly(ctx, [[w * 0.20, g], [w * 0.16, g - h * 0.70], [w * 0.84, g - h * 0.70], [w * 0.80, g]], C.wood);
+      ellipse(ctx, w * 0.5, g - h * 0.70, w * 0.34, h * 0.13, C.woodRing);
+      ellipse(ctx, w * 0.5, g - h * 0.70, w * 0.20, h * 0.075, C.woodDark);
+      ctx.globalAlpha = 0.4;
+      ctx.beginPath(); ctx.moveTo(w * 0.30, g - h * 0.60); ctx.lineTo(w * 0.32, g - h * 0.06);
+      stroke(ctx, C.woodDark, w * 0.045);
+      ctx.beginPath(); ctx.moveTo(w * 0.62, g - h * 0.62); ctx.lineTo(w * 0.60, g - h * 0.08);
+      stroke(ctx, C.woodDark, w * 0.045);
+      ctx.globalAlpha = 1;
+    },
+
+    bush: function (ctx, w, h) {
+      var g = h * 0.98;
+      ellipse(ctx, w * 0.5, g - h * 0.10, w * 0.44, h * 0.14, C.leafDark);
+      ellipse(ctx, w * 0.30, g - h * 0.32, w * 0.26, h * 0.26, C.leaf);
+      ellipse(ctx, w * 0.70, g - h * 0.30, w * 0.24, h * 0.24, C.leaf);
+      ellipse(ctx, w * 0.50, g - h * 0.52, w * 0.30, h * 0.28, C.leafLight);
+      ellipse(ctx, w * 0.42, g - h * 0.58, w * 0.13, h * 0.11, '#7ab85f');
+    },
+
+    /* -------------------------------------------------------------- pickups */
+    mushroom: function (ctx, w, h) {
+      var g = h * 0.94;
+      roundRect(ctx, w * 0.38, g - h * 0.44, w * 0.24, h * 0.44, w * 0.10, C.mushStem);
+      ctx.beginPath();
+      ctx.moveTo(w * 0.08, g - h * 0.40);
+      ctx.quadraticCurveTo(w * 0.5, g - h * 0.98, w * 0.92, g - h * 0.40);
+      ctx.closePath();
+      ctx.fillStyle = C.mushCap; ctx.fill();
+      ellipse(ctx, w * 0.34, g - h * 0.58, w * 0.075, h * 0.055, '#fff2e0');
+      ellipse(ctx, w * 0.60, g - h * 0.66, w * 0.06, h * 0.045, '#fff2e0');
+      ellipse(ctx, w * 0.74, g - h * 0.50, w * 0.05, h * 0.038, '#fff2e0');
+    },
+
+    berry: function (ctx, w, h) {
+      var g = h * 0.92;
+      ctx.beginPath();
+      ctx.moveTo(w * 0.52, g - h * 0.52);
+      ctx.quadraticCurveTo(w * 0.62, g - h * 0.80, w * 0.84, g - h * 0.86);
+      stroke(ctx, C.leafDark, w * 0.05);
+      ellipse(ctx, w * 0.34, g - h * 0.26, w * 0.20, h * 0.20, C.berryDark);
+      ellipse(ctx, w * 0.66, g - h * 0.28, w * 0.19, h * 0.19, C.berry);
+      ellipse(ctx, w * 0.50, g - h * 0.50, w * 0.21, h * 0.21, C.berry);
+      ellipse(ctx, w * 0.44, g - h * 0.56, w * 0.06, h * 0.06, '#c9aef0');
+      poly(ctx, [[w * 0.62, g - h * 0.74], [w * 0.86, g - h * 0.92], [w * 0.88, g - h * 0.68]], C.leaf);
+    },
+
+    shrimp: function (ctx, w, h) {
+      var g = h * 0.92;
+      ctx.beginPath();
+      ctx.arc(w * 0.48, g - h * 0.44, w * 0.28, Math.PI * 0.15, Math.PI * 1.35);
+      stroke(ctx, C.shrimp, h * 0.30);
+      ctx.beginPath();
+      ctx.arc(w * 0.48, g - h * 0.44, w * 0.28, Math.PI * 0.15, Math.PI * 0.75);
+      stroke(ctx, C.shrimpDark, h * 0.07);
+      poly(ctx, [[w * 0.20, g - h * 0.20], [w * 0.02, g - h * 0.04], [w * 0.06, g - h * 0.36]], C.shrimpDark);
+      ellipse(ctx, w * 0.74, g - h * 0.62, w * 0.055, h * 0.075, C.eye);
+      ctx.beginPath();
+      ctx.moveTo(w * 0.78, g - h * 0.66);
+      ctx.quadraticCurveTo(w * 0.96, g - h * 0.86, w * 0.90, g - h * 0.98);
+      stroke(ctx, C.shrimpDark, h * 0.035);
+    },
+
+    /* -------------------------------------------------------------- hazards */
+    slime: function (ctx, w, h) {
+      var g = h * 0.96;
+      ellipse(ctx, w * 0.5, g - h * 0.16, w * 0.46, h * 0.30, C.slimeDark);
+      ellipse(ctx, w * 0.5, g - h * 0.22, w * 0.40, h * 0.26, C.slime);
+      ellipse(ctx, w * 0.34, g - h * 0.32, w * 0.10, h * 0.08, '#b6e88a');
+      ellipse(ctx, w * 0.78, g - h * 0.18, w * 0.05, h * 0.05, C.slime);
+      ellipse(ctx, w * 0.16, g - h * 0.14, w * 0.045, h * 0.04, C.slime);
+    },
+
+    honey: function (ctx, w, h) {
+      var g = h * 0.96;
+      poly(ctx, [[w * 0.22, g - h * 0.66], [w * 0.78, g - h * 0.66], [w * 0.86, g - h * 0.10], [w * 0.14, g - h * 0.10]], C.honeyPot);
+      roundRect(ctx, w * 0.14, g - h * 0.78, w * 0.72, h * 0.16, w * 0.06, '#8f5330');
+      roundRect(ctx, w * 0.26, g - h * 0.50, w * 0.48, h * 0.22, w * 0.05, '#f2e3c8');
+      ctx.beginPath();
+      ctx.moveTo(w * 0.30, g - h * 0.62);
+      ctx.quadraticCurveTo(w * 0.24, g - h * 0.40, w * 0.32, g - h * 0.22);
+      stroke(ctx, C.honey, w * 0.10);
+      ellipse(ctx, w * 0.33, g - h * 0.18, w * 0.10, h * 0.07, C.honeyDark);
+    },
+
+    /* ------------------------------------------------------------------ NPC */
+    bear: function (ctx, w, h, f) {
+      var g = h * 0.98, arm = f === 0 ? 0 : -h * 0.06;
+      ellipse(ctx, w * 0.5, g - h * 0.28, w * 0.34, h * 0.28, C.bear);
+      ellipse(ctx, w * 0.5, g - h * 0.24, w * 0.22, h * 0.18, C.bearMuzzle);
+      roundRect(ctx, w * 0.06, g - h * 0.46 + arm, w * 0.20, h * 0.30, w * 0.09, C.bearDark);
+      roundRect(ctx, w * 0.74, g - h * 0.46 - arm, w * 0.20, h * 0.30, w * 0.09, C.bearDark);
+      ellipse(ctx, w * 0.26, g - h * 0.74, w * 0.11, h * 0.10, C.bear);
+      ellipse(ctx, w * 0.74, g - h * 0.74, w * 0.11, h * 0.10, C.bear);
+      ellipse(ctx, w * 0.26, g - h * 0.74, w * 0.06, h * 0.055, C.bearMuzzle);
+      ellipse(ctx, w * 0.74, g - h * 0.74, w * 0.06, h * 0.055, C.bearMuzzle);
+      ellipse(ctx, w * 0.5, g - h * 0.66, w * 0.28, h * 0.24, C.bear);
+      ellipse(ctx, w * 0.5, g - h * 0.60, w * 0.16, h * 0.12, C.bearMuzzle);
+      ellipse(ctx, w * 0.41, g - h * 0.72, w * 0.035, h * 0.035, C.eye);
+      ellipse(ctx, w * 0.59, g - h * 0.72, w * 0.035, h * 0.035, C.eye);
+      ellipse(ctx, w * 0.5, g - h * 0.62, w * 0.05, h * 0.035, C.eye);
+    },
+
+    moose: function (ctx, w, h, f) {
+      var g = h * 0.98, sway = f === 0 ? 0 : w * 0.012;
+      roundRect(ctx, w * 0.24, g - h * 0.30, w * 0.10, h * 0.30, w * 0.04, C.mooseDark);
+      roundRect(ctx, w * 0.66, g - h * 0.30, w * 0.10, h * 0.30, w * 0.04, C.mooseDark);
+      ellipse(ctx, w * 0.5, g - h * 0.42, w * 0.30, h * 0.20, C.moose);
+      roundRect(ctx, w * 0.42 + sway, g - h * 0.72, w * 0.16, h * 0.26, w * 0.06, C.moose);
+      ellipse(ctx, w * 0.5 + sway, g - h * 0.76, w * 0.15, h * 0.13, C.moose);
+      ellipse(ctx, w * 0.5 + sway, g - h * 0.70, w * 0.10, h * 0.08, C.mooseDark);
+      ellipse(ctx, w * 0.44 + sway, g - h * 0.80, w * 0.028, h * 0.026, C.eye);
+      ellipse(ctx, w * 0.56 + sway, g - h * 0.80, w * 0.028, h * 0.026, C.eye);
+      poly(ctx, [[w * 0.40 + sway, g - h * 0.86], [w * 0.16, g - h * 0.96], [w * 0.06, g - h * 0.84],
+                 [w * 0.22, g - h * 0.88], [w * 0.30, g - h * 0.98], [w * 0.38 + sway, g - h * 0.90]], C.antler);
+      poly(ctx, [[w * 0.60 + sway, g - h * 0.86], [w * 0.84, g - h * 0.96], [w * 0.94, g - h * 0.84],
+                 [w * 0.78, g - h * 0.88], [w * 0.70, g - h * 0.98], [w * 0.62 + sway, g - h * 0.90]], C.antler);
+    },
+
+    squirrel: function (ctx, w, h, f) {
+      var g = h * 0.98, tail = f === 0 ? 0 : -w * 0.03;
+      ctx.beginPath();
+      ctx.moveTo(w * 0.30, g - h * 0.20);
+      ctx.quadraticCurveTo(w * 0.02 + tail, g - h * 0.46, w * 0.22 + tail, g - h * 0.90);
+      stroke(ctx, C.squirrel, w * 0.22);
+      ctx.beginPath();
+      ctx.moveTo(w * 0.30, g - h * 0.22);
+      ctx.quadraticCurveTo(w * 0.10 + tail, g - h * 0.46, w * 0.24 + tail, g - h * 0.82);
+      stroke(ctx, C.squirrelBelly, w * 0.09);
+      ellipse(ctx, w * 0.56, g - h * 0.28, w * 0.20, h * 0.22, C.squirrel);
+      ellipse(ctx, w * 0.58, g - h * 0.24, w * 0.12, h * 0.14, C.squirrelBelly);
+      ellipse(ctx, w * 0.62, g - h * 0.58, w * 0.16, h * 0.16, C.squirrel);
+      poly(ctx, [[w * 0.50, g - h * 0.66], [w * 0.52, g - h * 0.82], [w * 0.62, g - h * 0.70]], C.squirrelDark);
+      poly(ctx, [[w * 0.70, g - h * 0.70], [w * 0.78, g - h * 0.84], [w * 0.78, g - h * 0.66]], C.squirrelDark);
+      ellipse(ctx, w * 0.56, g - h * 0.60, w * 0.03, h * 0.03, C.eye);
+      ellipse(ctx, w * 0.70, g - h * 0.60, w * 0.03, h * 0.03, C.eye);
+      ellipse(ctx, w * 0.64, g - h * 0.53, w * 0.035, h * 0.025, C.eye);
+    },
+
+    /* -------------------------------------------------------------- scenery */
+    tree_pine: function (ctx, w, h) {
+      var g = h * 0.99;
+      roundRect(ctx, w * 0.42, g - h * 0.26, w * 0.16, h * 0.26, w * 0.03, C.woodDark);
+      poly(ctx, [[w * 0.5, g - h * 0.98], [w * 0.86, g - h * 0.60], [w * 0.14, g - h * 0.60]], C.leafDark);
+      poly(ctx, [[w * 0.5, g - h * 0.82], [w * 0.92, g - h * 0.40], [w * 0.08, g - h * 0.40]], C.leaf);
+      poly(ctx, [[w * 0.5, g - h * 0.62], [w * 0.96, g - h * 0.22], [w * 0.04, g - h * 0.22]], C.leafDark);
+      ctx.globalAlpha = 0.3;
+      poly(ctx, [[w * 0.5, g - h * 0.82], [w * 0.5, g - h * 0.40], [w * 0.08, g - h * 0.40]], C.leafLight);
+      ctx.globalAlpha = 1;
+    },
+
+    tree_oak: function (ctx, w, h) {
+      var g = h * 0.99;
+      roundRect(ctx, w * 0.44, g - h * 0.40, w * 0.14, h * 0.40, w * 0.03, C.wood);
+      ctx.beginPath();
+      ctx.moveTo(w * 0.5, g - h * 0.34); ctx.lineTo(w * 0.30, g - h * 0.52);
+      stroke(ctx, C.wood, w * 0.05);
+      ctx.beginPath();
+      ctx.moveTo(w * 0.5, g - h * 0.38); ctx.lineTo(w * 0.72, g - h * 0.56);
+      stroke(ctx, C.wood, w * 0.05);
+      ellipse(ctx, w * 0.30, g - h * 0.60, w * 0.26, h * 0.20, C.leafDark);
+      ellipse(ctx, w * 0.72, g - h * 0.62, w * 0.26, h * 0.20, C.leafDark);
+      ellipse(ctx, w * 0.50, g - h * 0.78, w * 0.34, h * 0.24, C.leaf);
+      ellipse(ctx, w * 0.38, g - h * 0.84, w * 0.16, h * 0.12, C.leafLight);
+    },
+
+    fern: function (ctx, w, h) {
+      var g = h * 0.98, i;
+      for (i = 0; i < 5; i++) {
+        var a = -1.35 + i * 0.62;
+        ctx.beginPath();
+        ctx.moveTo(w * 0.5, g);
+        ctx.quadraticCurveTo(w * (0.5 + Math.sin(a) * 0.30), g - h * 0.62,
+                             w * (0.5 + Math.sin(a) * 0.52), g - h * 0.86);
+        stroke(ctx, i % 2 ? C.leaf : C.leafDark, w * 0.055);
+      }
+      ellipse(ctx, w * 0.5, g - h * 0.04, w * 0.22, h * 0.07, C.leafDark);
+    }
+  };
+
+  FA.Placeholders = {
+    painters: PAINTERS,
+    has: function (key) { return Object.prototype.hasOwnProperty.call(PAINTERS, key); },
+    paint: function (key, ctx, w, h, frame, frames) {
+      var p = PAINTERS[key];
+      if (!p) {
+        // Unknown key: magenta box, so a missing painter is impossible to miss.
+        roundRect(ctx, w * 0.1, h * 0.1, w * 0.8, h * 0.8, w * 0.08, '#ff00aa');
+        return;
+      }
+      p(ctx, w, h, frame, frames);
+    }
+  };
+})(window.FA = window.FA || {});
+
+/* ===== src/assets.js ================================================= */
+/* =============================================================================
+ * assets.js — one lookup table for every sprite sheet.
+ *
+ * Two sources, one interface:
+ *   useExternal === false -> sheets are painted at runtime by placeholders.js
+ *   useExternal === true  -> sheets load from disk, and any missing file falls
+ *                            back to its placeholder, so a half-finished art
+ *                            pass never blocks playtesting.
+ *
+ * Sheet contract: frames laid out left-to-right in a single row, each frame
+ * frameW x frameH, art anchored bottom-centre inside its frame.
+ * ========================================================================== */
+(function (FA) {
+  'use strict';
+
+  var CONFIG = FA.CONFIG;
+  var SUPERSAMPLE = 2;    // placeholders are painted at 2x, then downscaled
+
+  var sheets = {};
+  var report = { placeholder: [], external: [], failed: [] };
+
+  function makeCanvas(w, h) {
+    var c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    return c;
+  }
+
+  function buildPlaceholderSheet(key, def) {
+    var frames = def.frames || 1;
+    var fw = Math.round(def.frameW * SUPERSAMPLE);
+    var fh = Math.round(def.frameH * SUPERSAMPLE);
+    var canvas = makeCanvas(fw * frames, fh);
+    var ctx = canvas.getContext('2d');
+
+    for (var f = 0; f < frames; f++) {
+      ctx.save();
+      ctx.translate(f * fw, 0);
+      ctx.beginPath();
+      ctx.rect(0, 0, fw, fh);
+      ctx.clip();                    // a painter can never bleed into a neighbour
+      FA.Placeholders.paint(key, ctx, fw, fh, f, frames);
+      if (CONFIG.debug.labelPlaceholders) {
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+        ctx.font = 'bold ' + Math.round(fh * 0.11) + 'px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(key, fw / 2, fh * 0.12);
+      }
+      ctx.restore();
+    }
+    return { image: canvas, frameW: fw, frameH: fh, frames: frames, fps: def.fps || 0, source: 'placeholder' };
+  }
+
+  function loadExternalSheet(key, def, done) {
+    var img = new Image();
+    img.onload = function () {
+      sheets[key] = {
+        image: img,
+        frameW: def.frameW,
+        frameH: def.frameH,
+        frames: def.frames || 1,
+        fps: def.fps || 0,
+        source: 'external'
+      };
+      report.external.push(key);
+      done();
+    };
+    img.onerror = function () {
+      sheets[key] = buildPlaceholderSheet(key, def);
+      report.failed.push(key);
+      done();
+    };
+    img.src = CONFIG.assets.basePath + def.file;
+  }
+
+  FA.Assets = {
+    /** Resolve every key in the manifest, then call onReady once. */
+    load: function (onReady) {
+      var manifest = CONFIG.assets.manifest;
+      var keys = Object.keys(manifest);
+      var i;
+
+      if (!CONFIG.assets.useExternal) {
+        for (i = 0; i < keys.length; i++) {
+          sheets[keys[i]] = buildPlaceholderSheet(keys[i], manifest[keys[i]]);
+          report.placeholder.push(keys[i]);
+        }
+        setTimeout(onReady, 0);      // same control flow as the async path
+        return;
+      }
+
+      var pending = keys.length;
+      function step() { if (--pending <= 0) onReady(); }
+      for (i = 0; i < keys.length; i++) loadExternalSheet(keys[i], manifest[keys[i]], step);
+    },
+
+    get: function (key) { return sheets[key]; },
+    report: function () { return report; },
+
+    /** Frame index for a looping animation at `time` seconds. */
+    frameAt: function (key, time) {
+      var s = sheets[key];
+      if (!s || s.frames <= 1 || !s.fps) return 0;
+      return Math.floor(time * s.fps) % s.frames;
+    },
+
+    /** Simple draw, bottom-centre anchored. Used by menus and the HUD. */
+    draw: function (ctx, key, frame, dx, dy, dw, dh) {
+      var s = sheets[key];
+      if (!s) return;
+      var f = s.frames > 1 ? ((frame % s.frames) + s.frames) % s.frames : 0;
+      ctx.drawImage(
+        s.image, f * s.frameW, 0, s.frameW, s.frameH,
+        Math.round(dx - dw / 2), Math.round(dy - dh), Math.round(dw), Math.round(dh)
+      );
+    }
+  };
+})(window.FA = window.FA || {});
+
+/* ===== src/entities.js =============================================== */
+/* =============================================================================
+ * entities.js — factories for everything that sits on the track.
+ *
+ * Entities are plain data. They never update themselves; the systems that own
+ * them (spawner, game, renderer) do the work. That keeps update order explicit.
+ *
+ * Shared fields
+ *   kind      'obstacle' | 'pickup' | 'npc' | 'hazard' | 'scenery'
+ *   offset    lateral position, in road-half-widths (-1..1 is on the path)
+ *   yBase     bottom of the hitbox above the ground, in world units
+ *   height    hitbox height
+ *   halfWidth hitbox half-width, in offset units
+ *   worldW/H  drawn size in world units (independent of the hitbox)
+ * ========================================================================== */
+(function (FA) {
+  'use strict';
+
+  var CONFIG = FA.CONFIG;
+
+  function base(kind, type, def, offset) {
+    return {
+      kind: kind,
+      type: type,
+      sprite: def.sprite,
+      offset: offset,
+      yBase: def.yBase || 0,
+      height: def.height || def.worldH || 0,
+      halfWidth: def.halfWidth || 0,
+      worldW: def.worldW,
+      worldH: def.worldH,
+      avoid: def.avoid || null,
+      spent: false,      // hit or collected: still drawn out, stops colliding
+      segIndex: 0
+    };
+  }
+
+  FA.Entities = {
+    obstacle: function (type, offset) {
+      return base('obstacle', type, CONFIG.obstacles[type], offset);
+    },
+
+    /** `yLift` raises a pickup off the ground to trace a jump arc. */
+    pickup: function (type, offset, yLift) {
+      var def = CONFIG.pickups[type];
+      var e = base('pickup', type, def, offset);
+      e.yBase = def.yBase + (yLift || 0);
+      e.value = CONFIG.score.pickup[type] || 0;
+      e.bobPhase = Math.random() * Math.PI * 2;
+      return e;
+    },
+
+    scenery: function (spriteDef, offset, scale) {
+      return base('scenery', spriteDef.sprite, {
+        sprite: spriteDef.sprite,
+        worldW: spriteDef.worldW * scale,
+        worldH: spriteDef.worldH * scale,
+        halfWidth: 0, height: 0, yBase: 0
+      }, offset);
+    },
+
+    npc: function (type, offset) {
+      var def = CONFIG.npc.types[type];
+      var e = base('npc', type, {
+        sprite: def.sprite, worldW: def.worldW, worldH: def.worldH,
+        halfWidth: 0, height: 0, yBase: 0
+      }, offset);
+      // Animals patrol across the path: a moving target is far easier to
+      // notice than one parked at the verge, and it makes the moment they
+      // drop something legible.
+      e.dir = offset > 0 ? -1 : 1;      // head inward from whichever verge
+      e.crossSpeed = 0;                 // set by the spawner, jittered per animal
+      e.taps = 0;
+      e.tapsToStop = def.tapsToStop;
+      e.deactivated = false;
+      e.dropTimer = 0;
+      e.tapLock = 0;        // debounce, so one press cannot register twice
+      e.flash = 0;
+      e.fade = 0;
+      e.screenBox = null;   // stamped by the renderer each frame
+      e.drops = def.drops;
+      e.dropIntervalSec = def.dropIntervalSec;
+      return e;
+    },
+
+    /** A hazard in flight. `segIndex` is where it will land. */
+    hazard: function (type, segIndex, offset) {
+      var def = CONFIG.hazards[type];
+      var e = base('hazard', type, def, offset);
+      e.segIndex = segIndex;
+      e.y = CONFIG.hazardDrop.startHeight;
+      e.vy = 0;
+      e.landed = false;
+      e.life = def.lifeSec;
+      e.spin = 0;
+      e.splash = 0;
+      return e;
+    }
+  };
+})(window.FA = window.FA || {});
+
+/* ===== src/track.js ================================================== */
+/* =============================================================================
+ * track.js — the forest path.
+ *
+ * The world is a closed ring of fixed-length segments. Each segment carries a
+ * `curve` (how hard the path bends across it), an elevation, and the entities
+ * standing on it. Rendering walks outward from the camera and accumulates curve
+ * into a lateral offset — the standard pseudo-3D road technique. Nothing moves
+ * in world space; the camera's z advances and the ring wraps.
+ *
+ * Because the ring is closed the track never runs out. A level ends on its
+ * timer instead: you emerge from the forest.
+ * ========================================================================== */
+(function (FA) {
+  'use strict';
+
+  var CONFIG = FA.CONFIG;
+  var U = FA.Utils;
+
+  function lastY(segments) {
+    return segments.length === 0 ? 0 : segments[segments.length - 1].p2.world.y;
+  }
+
+  function addSegment(track, curve, y) {
+    var n = track.segments.length;
+    var len = CONFIG.road.segmentLength;
+    var band = Math.floor(n / CONFIG.road.rumbleLength) % 2;
+    track.segments.push({
+      index: n,
+      curve: curve,
+      color: band ? CONFIG.road.colors.dark : CONFIG.road.colors.light,
+      p1: { world: { x: 0, y: lastY(track.segments), z: n * len },
+            camera: { x: 0, y: 0, z: 0 }, screen: { x: 0, y: 0, w: 0, scale: 0 } },
+      p2: { world: { x: 0, y: y, z: (n + 1) * len },
+            camera: { x: 0, y: 0, z: 0 }, screen: { x: 0, y: 0, w: 0, scale: 0 } },
+      entities: [],   // scenery + this lap's gameplay props
+      dynamic: [],    // hazards currently tied to this segment
+      fog: 1,
+      clip: 0,
+      looped: false
+    });
+  }
+
+  /** enter/hold/leave are segment counts; curve is bend strength; dy elevation. */
+  function addRoad(track, enter, hold, leave, curve, dy) {
+    var startY = lastY(track.segments);
+    var endY = startY + dy;
+    var total = enter + hold + leave;
+    var n;
+    for (n = 0; n < enter; n++) {
+      addSegment(track, U.lerp(0, curve, U.easeIn(n / enter)),
+                 U.lerp(startY, endY, U.easeInOut(n / total)));
+    }
+    for (n = 0; n < hold; n++) {
+      addSegment(track, curve, U.lerp(startY, endY, U.easeInOut((enter + n) / total)));
+    }
+    for (n = 0; n < leave; n++) {
+      addSegment(track, U.lerp(curve, 0, U.easeOut(n / leave)),
+                 U.lerp(startY, endY, U.easeInOut((enter + hold + n) / total)));
+    }
+  }
+
+  var Track = {
+    /**
+     * Build a closed loop. The same seed always yields the same forest, so
+     * "level 3 is unfair at 0:40" is a reproducible bug, not a ghost story.
+     */
+    build: function (seed) {
+      var rc = CONFIG.road.curve;
+      var rng = U.createRNG(seed);
+      var track = { segments: [], length: 0, total: CONFIG.road.totalSegments };
+      var strengths = [rc.gentle, rc.gentle, rc.medium, rc.medium, rc.sharp];
+      var tail = 60;   // reserved for closing the loop back to flat
+
+      // A short flat run-up so the cat never spawns mid-corner.
+      addRoad(track, 10, CONFIG.spawn.startSafeSegments, 10, 0, 0);
+
+      while (track.segments.length < track.total - tail) {
+        addRoad(track, 4, rng.int(rc.straightRun[0], rc.straightRun[1]), 4, 0,
+                rng.chance(rc.hillChance) ? rng.range(-rc.hillHeight, rc.hillHeight) : 0);
+        if (track.segments.length >= track.total - tail) break;
+
+        var run = rng.int(rc.curveRun[0], rc.curveRun[1]);
+        var strength = rng.pick(strengths) * (rng.chance(0.5) ? -1 : 1);
+        addRoad(track, Math.round(run * 0.3), Math.round(run * 0.4), Math.round(run * 0.3),
+                strength, rng.chance(rc.hillChance) ? rng.range(-rc.hillHeight, rc.hillHeight) : 0);
+      }
+
+      // Close the ring: unwind curve and return elevation to zero so the seam
+      // between the last and first segment is invisible.
+      var remaining = track.total - track.segments.length;
+      if (remaining > 0) {
+        addRoad(track, Math.max(1, Math.floor(remaining * 0.4)),
+                Math.max(1, Math.floor(remaining * 0.2)),
+                Math.max(1, remaining - Math.floor(remaining * 0.6)),
+                0, -lastY(track.segments));
+      }
+      while (track.segments.length > track.total) track.segments.pop();
+      while (track.segments.length < track.total) addSegment(track, 0, lastY(track.segments));
+
+      track.length = track.segments.length * CONFIG.road.segmentLength;
+      return track;
+    },
+
+    findSegment: function (track, z) {
+      var i = Math.floor(z / CONFIG.road.segmentLength) % track.segments.length;
+      if (i < 0) i += track.segments.length;
+      return track.segments[i];
+    },
+
+    segmentAt: function (track, index) {
+      var n = track.segments.length;
+      return track.segments[((index % n) + n) % n];
+    },
+
+    /** Ground height under a z, for the camera and the cat's feet. */
+    roadYAt: function (track, z) {
+      var seg = Track.findSegment(track, z);
+      return U.lerp(seg.p1.world.y, seg.p2.world.y, U.percentRemaining(z, CONFIG.road.segmentLength));
+    },
+
+    /**
+     * Perspective projection. Isotropic: one `unit` scales both axes, which
+     * keeps sprite proportions honest on a tall 390x844 portrait canvas.
+     * `horizonY` places the vanishing point.
+     */
+    project: function (p, cameraX, cameraY, cameraZ, cameraDepth, width, unit, horizonY, roadHalfWidth) {
+      p.camera.x = p.world.x - cameraX;
+      p.camera.y = p.world.y - cameraY;
+      p.camera.z = p.world.z - cameraZ;
+      p.screen.scale = cameraDepth / p.camera.z;
+      p.screen.x = width / 2 + p.screen.scale * p.camera.x * unit;
+      p.screen.y = horizonY - p.screen.scale * p.camera.y * unit;
+      p.screen.w = p.screen.scale * roadHalfWidth * unit;
+    },
+
+    cameraDepth: function () {
+      return 1 / Math.tan((CONFIG.camera.fieldOfView / 2) * Math.PI / 180);
+    },
+
+    /** Drop this lap's gameplay props from a segment. Scenery is permanent. */
+    clearGameplay: function (segment) {
+      var kept = [];
+      for (var i = 0; i < segment.entities.length; i++) {
+        if (segment.entities[i].kind === 'scenery') kept.push(segment.entities[i]);
+      }
+      segment.entities = kept;
+      segment.dynamic.length = 0;
+    }
+  };
+
+  FA.Track = Track;
+})(window.FA = window.FA || {});
+
+/* ===== src/spawner.js ================================================ */
+/* =============================================================================
+ * spawner.js — rolling procedural content.
+ *
+ * A cursor runs ahead of the cat, always CONFIG.spawn.lookaheadSegments in
+ * front — beyond the draw distance, so nothing is ever seen popping into
+ * existence. Each time the cursor passes a segment it wipes last lap's props
+ * off it and, on a spacing timer, stamps down a "pattern".
+ *
+ * Fairness rule enforced here: a pattern never blocks all three lanes with
+ * un-jumpable props. Every arrangement has at least one survivable answer.
+ * ========================================================================== */
+(function (FA) {
+  'use strict';
+
+  var CONFIG = FA.CONFIG;
+  var U = FA.Utils;
+  var Track = FA.Track;
+  var Entities = FA.Entities;
+
+  var LANES = CONFIG.player.laneOffsets;
+
+  function place(track, index, entity) {
+    var seg = Track.segmentAt(track, index);
+    entity.segIndex = seg.index;
+    seg.entities.push(entity);
+    return entity;
+  }
+
+  /* --------------------------------------------------------------- patterns */
+  var PATTERNS = {
+    /** One prop in one lane. The bread and butter. */
+    singleObstacle: function (sp, game, at) {
+      var type = sp.rng.weighted({ rock: 34, log: 24, stump: 20, bush: 22 });
+      var lane = sp.rng.int(0, LANES.length - 1);
+      place(game.track, at, Entities.obstacle(type, LANES[lane]));
+      // A reward for committing to the lane next door.
+      if (sp.rng.chance(0.75)) {
+        var free = (lane + (sp.rng.chance(0.5) ? 1 : LANES.length - 1)) % LANES.length;
+        for (var i = 0; i < 3; i++) {
+          place(game.track, at + i * 4,
+                Entities.pickup(sp.rng.weighted({ berry: 60, mushroom: 40 }), LANES[free]));
+        }
+      }
+    },
+
+    /** Two lanes blocked, exactly one left open, with a carrot in the gap. */
+    doubleObstacle: function (sp, game, at) {
+      var openLane = sp.rng.int(0, LANES.length - 1);
+      for (var l = 0; l < LANES.length; l++) {
+        if (l === openLane) continue;
+        var type = sp.rng.weighted({ rock: 30, bush: 30, stump: 24, log: 16 });
+        place(game.track, at + sp.rng.int(0, 3), Entities.obstacle(type, LANES[l]));
+      }
+      place(game.track, at + 6, Entities.pickup('mushroom', LANES[openLane]));
+    },
+
+    /** Full-width branch: slide, or wear it. */
+    lowBranch: function (sp, game, at) {
+      place(game.track, at, Entities.obstacle('branch', 0));
+      if (sp.rng.chance(0.55)) {
+        place(game.track, at + 5, Entities.pickup('berry', LANES[sp.rng.int(0, LANES.length - 1)]));
+      }
+    },
+
+    /** A trail of collectables down one lane. */
+    pickupLine: function (sp, game, at) {
+      var lane = LANES[sp.rng.int(0, LANES.length - 1)];
+      var count = sp.rng.int(5, 8);
+      var type = sp.rng.weighted({ berry: 55, mushroom: 33, shrimp: 12 });
+      for (var i = 0; i < count; i++) place(game.track, at + i * 4, Entities.pickup(type, lane));
+    },
+
+    /** Jump arc: a low obstacle with pickups tracing the jump trajectory. */
+    pickupArc: function (sp, game, at) {
+      var lane = LANES[sp.rng.int(0, LANES.length - 1)];
+      var obstacleType = sp.rng.chance(0.5) ? 'rock' : 'log';
+      // Apex derived from the jump constants, so the arc stays correct if the
+      // jump is re-tuned in config.
+      var apex = CONFIG.player.jumpVelocity * CONFIG.player.jumpVelocity / (2 * CONFIG.player.gravity);
+      place(game.track, at + 8, Entities.obstacle(obstacleType, lane));
+      for (var i = 0; i < 5; i++) {
+        var lift = Math.sin((i / 4) * Math.PI) * apex * 0.8;
+        place(game.track, at + 2 + i * 4, Entities.pickup(i === 2 ? 'shrimp' : 'berry', lane, lift));
+      }
+    },
+
+    /** A forest local who throws things at you. */
+    npc: function (sp, game, at) {
+      var type = sp.rng.weighted({ bear: 34, moose: 30, squirrel: 36 });
+      var side = sp.rng.pick(CONFIG.npc.sideOffsets);
+      var e = Entities.npc(type, side);
+      e.crossSpeed = sp.rng.range(CONFIG.npc.crossSpeed[0], CONFIG.npc.crossSpeed[1]);
+      e.dropTimer = sp.rng.range(e.dropIntervalSec[0], e.dropIntervalSec[1]) * 0.5;
+      place(game.track, at, e);
+      game.npcs.push(e);
+    }
+  };
+
+  function pickScenery(rng, types) {
+    var total = 0, i, r;
+    for (i = 0; i < types.length; i++) total += types[i].weight;
+    r = rng.next() * total;
+    for (i = 0; i < types.length; i++) {
+      r -= types[i].weight;
+      if (r <= 0) return types[i];
+    }
+    return types[types.length - 1];
+  }
+
+  /** Spacing between patterns, tightening as the level number climbs. */
+  function gapFor(sp, game) {
+    var s = CONFIG.spawn;
+    var levels = Math.max(1, CONFIG.level.count - 1);
+    var tighten = 1 - s.difficultyRamp * ((game.level - 1) / levels);
+    return Math.max(12, Math.round(s.minGapSegments * tighten + sp.rng.int(0, s.gapJitter)));
+  }
+
+  /**
+   * Clear a segment that is about to be reused, unregistering any NPCs and
+   * hazards it owned so the live lists never leak across laps.
+   */
+  function wipe(game, absIndex) {
+    var seg = Track.segmentAt(game.track, absIndex);
+    var i, at;
+    for (i = 0; i < seg.entities.length; i++) {
+      if (seg.entities[i].kind !== 'npc') continue;
+      at = game.npcs.indexOf(seg.entities[i]);
+      if (at >= 0) game.npcs.splice(at, 1);
+    }
+    for (i = 0; i < seg.dynamic.length; i++) {
+      at = game.hazards.indexOf(seg.dynamic[i]);
+      if (at >= 0) game.hazards.splice(at, 1);
+    }
+    Track.clearGameplay(seg);
+  }
+
+  FA.Spawner = {
+    /** One-off: scatter permanent trees and ferns along both verges. */
+    decorate: function (track, seed) {
+      var rng = U.createRNG(seed ^ 0x5eed);
+      var sc = CONFIG.scenery;
+      for (var i = 0; i < track.segments.length; i += CONFIG.spawn.sceneryEvery) {
+        for (var side = -1; side <= 1; side += 2) {
+          if (!rng.chance(CONFIG.spawn.sceneryDensity)) continue;
+          var def = pickScenery(rng, sc.types);
+          var offset = side * rng.range(sc.minOffset, sc.maxOffset);
+          track.segments[i].entities.push(FA.Entities.scenery(def, offset, rng.range(0.8, 1.25)));
+        }
+      }
+    },
+
+    create: function (game, seed) {
+      return {
+        rng: U.createRNG(seed),
+        cursor: 0,                                  // absolute, never wraps
+        nextPatternAt: CONFIG.spawn.startSafeSegments
+      };
+    },
+
+    /** Populate everything between the cursor and the cat's lookahead. */
+    update: function (sp, game) {
+      var target = game.absSegment + CONFIG.spawn.lookaheadSegments;
+      var guard = 0;
+      while (sp.cursor < target && guard++ < 600) {
+        sp.cursor++;
+        wipe(game, sp.cursor);
+        if (sp.cursor >= sp.nextPatternAt) {
+          PATTERNS[sp.rng.weighted(CONFIG.spawn.patternWeights)](sp, game, sp.cursor);
+          sp.nextPatternAt = sp.cursor + gapFor(sp, game);
+        }
+      }
+    },
+
+    patterns: PATTERNS
+  };
+})(window.FA = window.FA || {});
+
+/* ===== src/player.js ================================================= */
+/* =============================================================================
+ * player.js — the cat.
+ *
+ * Owns lateral position, vertical physics and the pose state machine. Knows
+ * nothing about the track, collisions or scoring; game.js drives it.
+ *
+ * The three rules that make the controls feel fair:
+ *   - a jump pressed slightly before landing is buffered, not dropped
+ *   - a slide pressed mid-air becomes a fast-fall, then slides on touchdown
+ *   - a jump always cancels a slide (an escape hatch from a bad commit)
+ * ========================================================================== */
+(function (FA) {
+  'use strict';
+
+  var CONFIG = FA.CONFIG;
+  var U = FA.Utils;
+  var P = CONFIG.player;
+
+  function startJump(p) {
+    p.vy = P.jumpVelocity;
+    p.airborne = true;
+    p.fastFall = false;
+    p.sliding = false;
+    p.slideTimer = 0;
+    p.jumpBuffer = 0;
+  }
+
+  function startSlide(p) {
+    p.sliding = true;
+    p.slideTimer = P.slideDuration;
+  }
+
+  var Player = {
+    create: function () {
+      var p = {};
+      Player.reset(p);
+      return p;
+    },
+
+    reset: function (p) {
+      p.lane = P.startLane;
+      p.offset = P.laneOffsets[P.startLane];
+      p.y = 0;
+      p.vy = 0;
+      p.airborne = false;
+      p.fastFall = false;
+      p.sliding = false;
+      p.slideTimer = 0;
+      p.slideCooldown = 0;
+      p.slideQueued = false;
+      p.jumpBuffer = 0;
+      p.hp = P.maxHP;
+      p.invuln = 0;
+      p.hitTimer = 0;
+      p.animTime = 0;
+      p.lean = 0;          // -1..1 cosmetic tilt while switching lanes
+      p.state = 'run';
+      return p;
+    },
+
+    /** Discrete input. Safe to call several times in one frame. */
+    action: function (p, kind) {
+      switch (kind) {
+        case 'left':
+          p.lane = U.clamp(p.lane - 1, 0, P.laneOffsets.length - 1);
+          break;
+        case 'right':
+          p.lane = U.clamp(p.lane + 1, 0, P.laneOffsets.length - 1);
+          break;
+        case 'jump':
+          if (!p.airborne) startJump(p);
+          else p.jumpBuffer = CONFIG.input.jumpBufferSec;    // land-and-go
+          break;
+        case 'slide':
+          if (p.airborne) {
+            p.fastFall = true;
+            p.slideQueued = true;
+          } else if (p.slideCooldown <= 0) {
+            startSlide(p);
+          }
+          break;
+      }
+    },
+
+    update: function (p, dt) {
+      // ---- lateral: constant-speed travel toward the target lane
+      var target = P.laneOffsets[p.lane];
+      var delta = target - p.offset;
+      var step = P.laneChangeSpeed * dt;
+      if (Math.abs(delta) <= step) p.offset = target;
+      else p.offset += (delta > 0 ? 1 : -1) * step;
+      p.lean = U.damp(p.lean, U.clamp(delta * 2.2, -1, 1), 10, dt);
+
+      // ---- vertical
+      if (p.airborne) {
+        p.vy -= P.gravity * (p.fastFall ? P.fastFallMultiplier : 1) * dt;
+        p.y += p.vy * dt;
+        if (p.y <= 0) {
+          p.y = 0;
+          p.vy = 0;
+          p.airborne = false;
+          p.fastFall = false;
+          if (p.jumpBuffer > 0) startJump(p);
+          else if (p.slideQueued && p.slideCooldown <= 0) startSlide(p);
+          p.slideQueued = false;
+        }
+      }
+
+      // ---- timers
+      if (p.jumpBuffer > 0) p.jumpBuffer -= dt;
+      if (p.slideCooldown > 0) p.slideCooldown -= dt;
+      if (p.invuln > 0) p.invuln -= dt;
+      if (p.hitTimer > 0) p.hitTimer -= dt;
+      if (p.sliding) {
+        p.slideTimer -= dt;
+        if (p.slideTimer <= 0) {
+          p.sliding = false;
+          p.slideCooldown = P.slideCooldown;
+        }
+      }
+
+      p.animTime += dt;
+      p.state = p.hitTimer > 0 ? 'hit'
+              : p.airborne ? 'jump'
+              : p.sliding ? 'slide' : 'run';
+    },
+
+    /* hitbox accessors — world units vertically, offset units laterally */
+    top:    function (p) { return p.y + (p.sliding ? P.slideHeight : P.standHeight); },
+    bottom: function (p) { return p.y; },
+    left:   function (p) { return p.offset - P.hitboxHalfWidth; },
+    right:  function (p) { return p.offset + P.hitboxHalfWidth; },
+
+    canBeHit: function (p) {
+      return p.invuln <= 0 && !CONFIG.debug.invincible;
+    },
+
+    takeHit: function (p) {
+      p.hp -= 1;
+      p.invuln = P.invulnerableAfterHit;
+      p.hitTimer = 0.35;
+      p.sliding = false;      // never leave the cat stuck in a slide
+      p.slideTimer = 0;
+      return p.hp;
+    }
+  };
+
+  FA.Player = Player;
+})(window.FA = window.FA || {});
+
+/* ===== src/input.js ================================================== */
+/* =============================================================================
+ * input.js — one gesture layer for touch, mouse and keyboard.
+ *
+ * Everything downstream sees the same four verbs — left, right, jump, slide —
+ * plus a positional `tap` used to bop the forest characters.
+ *
+ * Arbitration, per pointer:
+ *   moved past swipeMinPx        -> swipe; fires once, rest of the drag ignored
+ *   released under tap thresholds -> tap at that point
+ * Pointers are tracked independently, so you can tap a bear with one thumb
+ * while the other thumb is mid-swipe.
+ * ========================================================================== */
+(function (FA) {
+  'use strict';
+
+  var CONFIG = FA.CONFIG;
+  var IN = CONFIG.input;
+
+  var handlers = { action: null, tap: null, pause: null };
+  var canvas = null;
+  var pointers = {};
+  var lastTapTime = 0;
+  var pendingTap = null;      // only used when doubleTapSlide is enabled
+  var enabled = true;
+
+  function toDesign(clientX, clientY) {
+    var r = canvas.getBoundingClientRect();
+    // The rect already reflects the CSS transform, so this is scale-agnostic.
+    return {
+      x: (clientX - r.left) / r.width * CONFIG.view.designWidth,
+      y: (clientY - r.top) / r.height * CONFIG.view.designHeight
+    };
+  }
+
+  function emit(kind) {
+    if (enabled && handlers.action) handlers.action(kind);
+  }
+
+  /** A tap that hits no animal still counts as a jump. */
+  function resolveTap(clientX, clientY) {
+    var p = toDesign(clientX, clientY);
+
+    if (IN.doubleTapSlide) {
+      var now = performance.now();
+      if (now - lastTapTime < IN.doubleTapMs) {
+        clearTimeout(pendingTap);
+        pendingTap = null;
+        lastTapTime = 0;
+        emit('slide');
+        return;
+      }
+      lastTapTime = now;
+      // Hitting an animal is resolved immediately; only the jump waits to see
+      // whether a second tap arrives.
+      if (handlers.tap && handlers.tap(p.x, p.y)) { lastTapTime = 0; return; }
+      pendingTap = setTimeout(function () {
+        pendingTap = null;
+        emit('jump');
+      }, IN.doubleTapMs);
+      return;
+    }
+
+    if (!(handlers.tap && handlers.tap(p.x, p.y))) emit('jump');
+  }
+
+  function start(id, x, y) {
+    pointers[id] = { x0: x, y0: y, t0: performance.now(), fired: false };
+  }
+
+  function move(id, x, y) {
+    var g = pointers[id];
+    if (!g || g.fired) return;
+    var dx = x - g.x0, dy = y - g.y0;
+    if (Math.sqrt(dx * dx + dy * dy) < IN.swipeMinPx) return;
+    g.fired = true;                                   // one verb per gesture
+    if (performance.now() - g.t0 > IN.swipeMaxTimeMs) return;   // too slow: a drag
+    if (Math.abs(dx) > Math.abs(dy)) emit(dx > 0 ? 'right' : 'left');
+    else emit(dy > 0 ? 'slide' : 'jump');
+  }
+
+  function end(id, x, y) {
+    var g = pointers[id];
+    delete pointers[id];
+    if (!g || g.fired) return;
+    var dx = x - g.x0, dy = y - g.y0;
+    if (Math.sqrt(dx * dx + dy * dy) <= IN.tapMaxPx &&
+        performance.now() - g.t0 <= IN.tapMaxTimeMs) {
+      resolveTap(x, y);
+    }
+  }
+
+  var KEYS = {
+    ArrowLeft: 'left', KeyA: 'left',
+    ArrowRight: 'right', KeyD: 'right',
+    ArrowUp: 'jump', KeyW: 'jump', Space: 'jump',
+    ArrowDown: 'slide', KeyS: 'slide'
+  };
+
+  FA.Input = {
+    init: function (canvasEl, hooks) {
+      canvas = canvasEl;
+      handlers = hooks;
+      var i, t;
+
+      // ---- touch. passive:false so scroll / pull-to-refresh can be blocked.
+      canvas.addEventListener('touchstart', function (e) {
+        e.preventDefault();
+        for (i = 0; i < e.changedTouches.length; i++) {
+          t = e.changedTouches[i];
+          start(t.identifier, t.clientX, t.clientY);
+        }
+      }, { passive: false });
+
+      canvas.addEventListener('touchmove', function (e) {
+        e.preventDefault();
+        for (i = 0; i < e.changedTouches.length; i++) {
+          t = e.changedTouches[i];
+          move(t.identifier, t.clientX, t.clientY);
+        }
+      }, { passive: false });
+
+      canvas.addEventListener('touchend', function (e) {
+        e.preventDefault();
+        for (i = 0; i < e.changedTouches.length; i++) {
+          t = e.changedTouches[i];
+          end(t.identifier, t.clientX, t.clientY);
+        }
+      }, { passive: false });
+
+      canvas.addEventListener('touchcancel', function (e) {
+        for (i = 0; i < e.changedTouches.length; i++) delete pointers[e.changedTouches[i].identifier];
+      }, { passive: false });
+
+      // ---- mouse: desktop parity (click = tap, drag = swipe)
+      var mouseDown = false;
+      canvas.addEventListener('mousedown', function (e) {
+        mouseDown = true;
+        start('mouse', e.clientX, e.clientY);
+      });
+      window.addEventListener('mousemove', function (e) {
+        if (mouseDown) move('mouse', e.clientX, e.clientY);
+      });
+      window.addEventListener('mouseup', function (e) {
+        if (!mouseDown) return;
+        mouseDown = false;
+        end('mouse', e.clientX, e.clientY);
+      });
+      canvas.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+
+      // ---- keyboard
+      window.addEventListener('keydown', function (e) {
+        if (e.repeat) return;                    // a held key must not machine-gun
+        if (e.code === 'Escape' || e.code === 'KeyP') {
+          e.preventDefault();
+          if (handlers.pause) handlers.pause();
+          return;
+        }
+        var action = KEYS[e.code];
+        if (!action) return;
+        e.preventDefault();                      // Space must not scroll the page
+        emit(action);
+      });
+    },
+
+    /** On-screen buttons and menus route through here. */
+    emit: emit,
+    toDesign: toDesign,
+
+    setEnabled: function (v) {
+      enabled = v;
+      if (!v) pointers = {};
+    },
+
+    /** Drop in-flight gestures when the game state changes underfoot. */
+    clear: function () {
+      pointers = {};
+      clearTimeout(pendingTap);
+      pendingTap = null;
+    }
+  };
+})(window.FA = window.FA || {});
+
+/* ===== src/audio.js ================================================== */
+/* =============================================================================
+ * audio.js — synthesised SFX. No audio files to ship, nothing to preload.
+ *
+ * Browsers only allow audio after a user gesture, so the context is created
+ * lazily on first use and resumed defensively before every sound.
+ * ========================================================================== */
+(function (FA) {
+  'use strict';
+
+  var CONFIG = FA.CONFIG;
+  var ctx = null;
+  var muted = false;
+
+  function ensure() {
+    if (!CONFIG.audio.enabled || muted) return null;
+    if (!ctx) {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      try { ctx = new AC(); } catch (e) { return null; }
+    }
+    if (ctx.state === 'suspended') ctx.resume();
+    return ctx;
+  }
+
+  /** One shaped oscillator note. */
+  function blip(freq, endFreq, duration, type, gain) {
+    var ac = ensure();
+    if (!ac) return;
+    var osc = ac.createOscillator();
+    var amp = ac.createGain();
+    var t0 = ac.currentTime;
+    osc.type = type || 'square';
+    osc.frequency.setValueAtTime(freq, t0);
+    if (endFreq && endFreq !== freq) {
+      osc.frequency.exponentialRampToValueAtTime(Math.max(1, endFreq), t0 + duration);
+    }
+    amp.gain.setValueAtTime(0.0001, t0);
+    amp.gain.exponentialRampToValueAtTime((gain || 1) * CONFIG.audio.masterVolume, t0 + 0.012);
+    amp.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
+    osc.connect(amp).connect(ac.destination);
+    osc.start(t0);
+    osc.stop(t0 + duration + 0.02);
+  }
+
+  function sequence(notes) {
+    if (!ensure()) return;
+    notes.forEach(function (n, i) {
+      setTimeout(function () { blip(n[0], n[1], n[2], n[3], n[4]); }, i * 90);
+    });
+  }
+
+  FA.Audio = {
+    unlock: function () { ensure(); },
+    toggleMute: function () { muted = !muted; return muted; },
+    isMuted: function () { return muted; },
+
+    jump:       function () { blip(420, 780, 0.14, 'square', 0.5); },
+    slide:      function () { blip(300, 140, 0.20, 'sawtooth', 0.35); },
+    pickup:     function (step) { blip(660 + (step || 0) * 55, 1180 + (step || 0) * 55, 0.12, 'triangle', 0.6); },
+    hit:        function () { blip(200, 60, 0.34, 'sawtooth', 0.8); },
+    npcHit:     function () { blip(520, 380, 0.09, 'square', 0.5); },
+    npcDown:    function () { sequence([[500, 700, 0.10, 'square', 0.6], [700, 980, 0.16, 'triangle', 0.6]]); },
+    levelClear: function () { sequence([[523, 523, 0.14, 'triangle', 0.7], [659, 659, 0.14, 'triangle', 0.7], [784, 784, 0.14, 'triangle', 0.7], [1047, 1047, 0.30, 'triangle', 0.7]]); },
+    gameOver:   function () { sequence([[440, 440, 0.18, 'square', 0.6], [349, 349, 0.18, 'square', 0.6], [262, 180, 0.45, 'sawtooth', 0.6]]); }
+  };
+})(window.FA = window.FA || {});
+
+/* ===== src/fx.js ===================================================== */
+/* =============================================================================
+ * fx.js — screen-space particles and floating score popups.
+ *
+ * Deliberately screen-space rather than world-space: these are feedback for
+ * the player, not objects in the forest, and they cost nothing to place. Both
+ * pools are pre-allocated ring buffers, so the hot loop allocates nothing and
+ * the GC never runs mid-run.
+ * ========================================================================== */
+(function (FA) {
+  'use strict';
+
+  var MAX_PARTICLES = 160;
+  var MAX_TEXTS = 24;
+
+  function makePool(n, factory) {
+    var a = new Array(n);
+    for (var i = 0; i < n; i++) a[i] = factory();
+    return a;
+  }
+
+  FA.FX = {
+    create: function () {
+      return {
+        particles: makePool(MAX_PARTICLES, function () {
+          return { alive: false, x: 0, y: 0, vx: 0, vy: 0, life: 0, maxLife: 1, size: 3, color: '#fff', gravity: 0 };
+        }),
+        texts: makePool(MAX_TEXTS, function () {
+          return { alive: false, x: 0, y: 0, vy: 0, life: 0, maxLife: 1, text: '', color: '#fff', size: 16 };
+        }),
+        pi: 0,
+        ti: 0
+      };
+    },
+
+    burst: function (fx, x, y, count, color, opts) {
+      opts = opts || {};
+      var spread = opts.spread || 140;
+      var size = opts.size || 3;
+      var life = opts.life || 0.5;
+      for (var i = 0; i < count; i++) {
+        var p = fx.particles[fx.pi];
+        fx.pi = (fx.pi + 1) % fx.particles.length;      // oldest gets recycled
+        var a = Math.random() * Math.PI * 2;
+        var sp = spread * (0.35 + Math.random() * 0.65);
+        p.alive = true;
+        p.x = x; p.y = y;
+        p.vx = Math.cos(a) * sp;
+        p.vy = Math.sin(a) * sp - (opts.lift || 40);
+        p.life = p.maxLife = life * (0.6 + Math.random() * 0.6);
+        p.size = size * (0.6 + Math.random() * 0.8);
+        p.color = color;
+        p.gravity = opts.gravity === undefined ? 320 : opts.gravity;
+      }
+    },
+
+    text: function (fx, x, y, text, color, size) {
+      var t = fx.texts[fx.ti];
+      fx.ti = (fx.ti + 1) % fx.texts.length;
+      t.alive = true;
+      t.x = x; t.y = y;
+      t.vy = -46;
+      t.life = t.maxLife = 0.9;
+      t.text = text;
+      t.color = color || '#ffe9a8';
+      t.size = size || 15;
+    },
+
+    update: function (fx, dt) {
+      var i, p, t;
+      for (i = 0; i < fx.particles.length; i++) {
+        p = fx.particles[i];
+        if (!p.alive) continue;
+        p.life -= dt;
+        if (p.life <= 0) { p.alive = false; continue; }
+        p.vy += p.gravity * dt;
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+      }
+      for (i = 0; i < fx.texts.length; i++) {
+        t = fx.texts[i];
+        if (!t.alive) continue;
+        t.life -= dt;
+        if (t.life <= 0) { t.alive = false; continue; }
+        t.y += t.vy * dt;
+        t.vy *= 0.94;
+      }
+    },
+
+    render: function (ctx, fx) {
+      var i, p, t, a;
+      ctx.save();
+      for (i = 0; i < fx.particles.length; i++) {
+        p = fx.particles[i];
+        if (!p.alive) continue;
+        a = p.life / p.maxLife;
+        ctx.globalAlpha = a;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * (0.4 + a * 0.6), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      ctx.textAlign = 'center';
+      for (i = 0; i < fx.texts.length; i++) {
+        t = fx.texts[i];
+        if (!t.alive) continue;
+        a = Math.min(1, t.life / t.maxLife * 1.6);
+        ctx.globalAlpha = a;
+        ctx.font = '700 ' + t.size + 'px ' + FA.FONT_UI;
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(20,26,18,0.75)';
+        ctx.strokeText(t.text, t.x, t.y);
+        ctx.fillStyle = t.color;
+        ctx.fillText(t.text, t.x, t.y);
+      }
+      ctx.restore();
+    }
+  };
+})(window.FA = window.FA || {});
+
+/* ===== src/renderer.js =============================================== */
+/* =============================================================================
+ * renderer.js — draws one frame.
+ *
+ * Pipeline per frame:
+ *   1. sky + parallax tree bands           (cheap, cached offscreen strips)
+ *   2. road segments, near to far, with a running `maxy` clip so distant
+ *      segments never paint over closer ones
+ *   3. sprites, far to near (painter's algorithm), clipped to their segment
+ *   4. the cat
+ *   5. fog / canopy vignette
+ *
+ * The renderer is read-only with respect to game state, with one exception:
+ * it stamps `screenBox` onto NPCs so the tap handler knows where they are on
+ * screen. That's deliberate — screen bounds only exist once you've projected.
+ * ========================================================================== */
+(function (FA) {
+  'use strict';
+
+  var CONFIG = FA.CONFIG;
+  var U = FA.Utils;
+  var Track = FA.Track;
+  var Assets = FA.Assets;
+
+  var W = CONFIG.view.designWidth;
+  var H = CONFIG.view.designHeight;
+  var UNIT = W / 2;                 // isotropic projection unit
+  var HORIZON = Math.round(H * CONFIG.camera.horizonRatio);
+
+  var FOG_COLOR = [26, 46, 34];     // deep forest haze
+  var strips = null;
+  var skyGradient = null;
+
+  /* ------------------------------------------------------- offscreen strips */
+  function buildStrip(width, height, colors, spikes, jitterSeed) {
+    var c = document.createElement('canvas');
+    c.width = width; c.height = height;
+    var ctx = c.getContext('2d');
+    var rng = U.createRNG(jitterSeed);
+    // Repeating conifer skyline. Drawn twice as wide as the screen so a single
+    // tile plus its neighbour always covers the viewport at any offset.
+    for (var layer = 0; layer < colors.length; layer++) {
+      ctx.fillStyle = colors[layer];
+      ctx.beginPath();
+      ctx.moveTo(0, height);
+      var step = width / spikes;
+      for (var i = 0; i <= spikes; i++) {
+        var x = i * step;
+        var peak = height * (0.15 + rng.next() * 0.55) + layer * height * 0.18;
+        ctx.lineTo(x - step * 0.42, height);
+        ctx.lineTo(x, peak);
+        ctx.lineTo(x + step * 0.42, height);
+      }
+      ctx.lineTo(width, height);
+      ctx.closePath();
+      ctx.fill();
+    }
+    return c;
+  }
+
+  function ensureAssets(ctx) {
+    if (strips) return;
+    strips = {
+      far: buildStrip(W * 2, 96, ['#20402c', '#1a3626'], 26, 7331),
+      near: buildStrip(W * 2, 150, ['#1b3a28', '#14301f'], 14, 991)
+    };
+    skyGradient = ctx.createLinearGradient(0, 0, 0, HORIZON + 40);
+    skyGradient.addColorStop(0, '#0f2a24');
+    skyGradient.addColorStop(0.45, '#2f5b46');
+    skyGradient.addColorStop(0.78, '#7d9a5e');
+    skyGradient.addColorStop(1, '#c9c07a');
+  }
+
+  /* ---------------------------------------------------------------- helpers */
+  function rect(ctx, x, y, w, h, color) {
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, w, h);
+  }
+
+  function quad(ctx, x1, y1, w1, x2, y2, w2, color) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(x1 - w1, y1);
+    ctx.lineTo(x2 - w2, y2);
+    ctx.lineTo(x2 + w2, y2);
+    ctx.lineTo(x1 + w1, y1);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function fogRGBA(alpha) {
+    return 'rgba(' + FOG_COLOR[0] + ',' + FOG_COLOR[1] + ',' + FOG_COLOR[2] + ',' + alpha.toFixed(3) + ')';
+  }
+
+  /**
+   * Draw a sprite frame, clipped so it cannot spill below `clipY` (which is the
+   * top of whatever closer geometry already covered that band of screen).
+   * Uses source-rect trimming rather than ctx.clip() — no state churn.
+   */
+  function drawSheet(ctx, key, frame, dx, dy, dw, dh, clipY, alpha, tint) {
+    var s = Assets.get(key);
+    if (!s || dw <= 0 || dh <= 0) return;
+    if (dx + dw / 2 < 0 || dx - dw / 2 > W || dy - dh > H || dy < -dh) return;  // offscreen
+
+    var f = s.frames > 1 ? ((frame % s.frames) + s.frames) % s.frames : 0;
+    var destX = Math.round(dx - dw / 2);
+    var destY = Math.round(dy - dh);
+    var clipH = clipY ? Math.max(0, destY + dh - clipY) : 0;
+    if (clipH >= dh) return;
+
+    if (alpha !== undefined && alpha < 1) { ctx.save(); ctx.globalAlpha = alpha; }
+    ctx.drawImage(
+      s.image,
+      f * s.frameW, 0, s.frameW, s.frameH - (s.frameH * clipH / dh),
+      destX, destY, Math.round(dw), Math.round(dh - clipH)
+    );
+    if (tint) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'source-atop';
+      ctx.fillStyle = tint;
+      ctx.fillRect(destX, destY, Math.round(dw), Math.round(dh - clipH));
+      ctx.restore();
+    }
+    if (alpha !== undefined && alpha < 1) ctx.restore();
+  }
+
+  function groundShadow(ctx, x, y, w, alpha, clipY) {
+    if (clipY && y > clipY) return;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = '#10210f';
+    ctx.beginPath();
+    ctx.ellipse(x, y, w, w * 0.32, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /* ------------------------------------------------------------------ frame */
+  var Renderer = {
+    horizonY: HORIZON,
+    unit: UNIT,
+
+    init: function (ctx) { ensureAssets(ctx); },
+
+    render: function (ctx, game) {
+      ensureAssets(ctx);
+
+      var road = CONFIG.road;
+      var cam = CONFIG.camera;
+      var track = game.track;
+      var segCount = track.segments.length;
+      var cameraDepth = Track.cameraDepth();
+      var trackZ = game.trackZ;
+      var cameraZ = U.wrap(trackZ, -cam.backZ, track.length);
+      var baseSegment = Track.findSegment(track, cameraZ);
+      var basePercent = U.percentRemaining(cameraZ, road.segmentLength);
+      var playerSegment = Track.findSegment(track, trackZ);
+      var playerPercent = U.percentRemaining(trackZ, road.segmentLength);
+      var cameraX = game.cameraLateral * road.halfWidth;
+      var cameraY = cam.height + U.lerp(baseSegment.p1.world.y, baseSegment.p2.world.y, basePercent);
+      var drawDistance = cam.drawDistance;
+
+      /* ---------------------------------------------------------- 1. sky */
+      rect(ctx, 0, 0, W, HORIZON + 60, '#000');
+      ctx.fillStyle = skyGradient;
+      ctx.fillRect(0, 0, W, HORIZON + 60);
+
+      // low sun, sitting just above the vanishing point
+      ctx.save();
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = '#f6e3a8';
+      ctx.beginPath();
+      ctx.arc(W * 0.5 - game.skyOffset * W * 0.35, HORIZON - 46, 40, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      drawStrip(ctx, strips.far, game.skyOffset * 2.2, HORIZON - 78, 0.95);
+      drawStrip(ctx, strips.near, game.treeOffset * 3.4, HORIZON - 118, 1);
+
+      // forest floor base coat, so any un-drawn band still reads as ground
+      rect(ctx, 0, HORIZON - 2, W, H - HORIZON + 2, road.colors.dark.grass);
+
+      /* ------------------------------------------- 2. project + draw road */
+      var maxy = H;
+      var x = 0;
+      var dx = -(baseSegment.curve * basePercent);
+      var playerCurveX = 0;
+      var n, seg;
+
+      for (n = 0; n < drawDistance; n++) {
+        seg = track.segments[(baseSegment.index + n) % segCount];
+        seg.looped = seg.index < baseSegment.index;
+        seg.fog = U.fog(n / drawDistance, cam.fogDensity);
+        seg.clip = maxy;
+
+        var zOffset = cameraZ - (seg.looped ? track.length : 0);
+        Track.project(seg.p1, cameraX - x, cameraY, zOffset, cameraDepth, W, UNIT, HORIZON, road.halfWidth);
+        Track.project(seg.p2, cameraX - x - dx, cameraY, zOffset, cameraDepth, W, UNIT, HORIZON, road.halfWidth);
+
+        if (seg.index === playerSegment.index) playerCurveX = x + dx * playerPercent;
+
+        x += dx;
+        dx += seg.curve;
+
+        if (seg.p1.camera.z <= cameraDepth ||     // behind the near plane
+            seg.p2.screen.y >= seg.p1.screen.y || // degenerate / inverted
+            seg.p2.screen.y >= maxy) {            // hidden behind closer road
+          continue;
+        }
+        drawSegment(ctx, seg, road);
+        maxy = seg.p2.screen.y;
+      }
+
+      /* --------------------------------------------- 3. sprites, far→near */
+      for (n = drawDistance - 1; n >= 0; n--) {
+        seg = track.segments[(baseSegment.index + n) % segCount];
+        if (seg.p1.camera.z <= cameraDepth || seg.p1.screen.scale <= 0) continue;
+        var i;
+        for (i = 0; i < seg.entities.length; i++) drawEntity(ctx, seg, seg.entities[i], game);
+        for (i = 0; i < seg.dynamic.length; i++) drawHazard(ctx, seg, seg.dynamic[i]);
+      }
+
+      /* ------------------------------------------------------- 4. the cat */
+      drawPlayer(ctx, game, playerSegment, playerPercent, playerCurveX, cameraX, cameraY, cameraDepth);
+
+      /* ------------------------------------------------ 5. canopy framing */
+      drawVignette(ctx, game);
+
+      FA.FX.render(ctx, game.fx);
+    }
+  };
+
+  function drawStrip(ctx, strip, offset, y, alpha) {
+    var w = strip.width;
+    var ox = -(((offset % 1) + 1) % 1) * w;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(strip, ox, y);
+    ctx.drawImage(strip, ox + w, y);
+    ctx.restore();
+  }
+
+  function drawSegment(ctx, seg, road) {
+    var p1 = seg.p1.screen, p2 = seg.p2.screen;
+    var h = p1.y - p2.y;
+    var r1 = p1.w / 5, r2 = p2.w / 5;
+
+    rect(ctx, 0, p2.y, CONFIG.view.designWidth, h + 1, seg.color.grass);
+    quad(ctx, p1.x - p1.w - r1 * 0.5, p1.y, r1 * 0.5, p2.x - p2.w - r2 * 0.5, p2.y, r2 * 0.5, seg.color.rumble);
+    quad(ctx, p1.x + p1.w + r1 * 0.5, p1.y, r1 * 0.5, p2.x + p2.w + r2 * 0.5, p2.y, r2 * 0.5, seg.color.rumble);
+    quad(ctx, p1.x, p1.y, p1.w, p2.x, p2.y, p2.w, seg.color.road);
+
+    if (seg.fog < 1) {
+      rect(ctx, 0, p2.y, CONFIG.view.designWidth, h + 1, fogRGBA(1 - seg.fog));
+    }
+  }
+
+  function drawEntity(ctx, seg, e, game) {
+    var s = seg.p1.screen;
+    var scale = s.scale;
+    var lift = e.yBase;
+    var bob = 0;
+
+    if (e.kind === 'pickup') {
+      if (e.spent) return;
+      bob = Math.sin(game.elapsed * 3 + e.bobPhase) * 40;
+    }
+    if (e.kind === 'obstacle' && e.spent) return;
+
+    var dw = e.worldW * scale * UNIT;
+    var dh = e.worldH * scale * UNIT;
+    var dx = s.x + scale * e.offset * CONFIG.road.halfWidth * UNIT;
+    var dy = s.y - (lift + bob) * scale * UNIT;
+
+    // contact shadow keeps props glued to the path
+    if (e.kind !== 'scenery') groundShadow(ctx, dx, s.y, dw * 0.34, 0.28 * seg.fog, seg.clip);
+
+    var frame = 0;
+    var alpha = seg.fog;
+    var tint = null;
+
+    if (e.kind === 'npc') {
+      frame = Assets.frameAt(e.sprite, game.elapsed + e.offset);
+      if (e.flash > 0) tint = 'rgba(255,255,255,' + (0.65 * (e.flash / CONFIG.npc.hitFlashSec)).toFixed(2) + ')';
+      if (e.deactivated) {
+        alpha *= U.clamp(1 - e.fade / CONFIG.npc.deactivateFadeSec, 0.25, 1);
+        tint = 'rgba(80,110,120,0.45)';
+      }
+      // Remember where this animal is on screen so taps can find it.
+      e.screenBox = { x: dx - dw / 2, y: dy - dh, w: dw, h: dh };
+    }
+
+    drawSheet(ctx, e.sprite, frame, dx, dy, dw, dh, seg.clip, alpha, tint);
+
+    if (CONFIG.debug.showHitboxes && e.halfWidth > 0) {
+      debugBox(ctx, seg, e.offset, e.halfWidth, e.yBase, e.height, '#ff4d6d');
+    }
+  }
+
+  function drawHazard(ctx, seg, hz) {
+    var s = seg.p1.screen;
+    var scale = s.scale;
+    var dw = hz.worldW * scale * UNIT;
+    var dh = hz.worldH * scale * UNIT;
+    var dx = s.x + scale * hz.offset * CONFIG.road.halfWidth * UNIT;
+    var dy = s.y - hz.y * scale * UNIT;
+
+    // A shadow on the ground telegraphs exactly where the thing will land.
+    var shrink = U.clamp(1 - hz.y / CONFIG.hazardDrop.startHeight, 0.25, 1);
+    groundShadow(ctx, dx, s.y, dw * 0.36 * shrink, 0.40 * seg.fog, seg.clip);
+
+    if (hz.landed && hz.splash > 0) {
+      var t = 1 - hz.splash / CONFIG.hazardDrop.splashSec;
+      dw *= 1 + t * 0.25;
+      dh *= 1 - t * 0.15;
+    }
+
+    if (!hz.landed) {
+      ctx.save();
+      ctx.translate(dx, dy - dh / 2);
+      ctx.rotate(hz.spin);
+      ctx.translate(-dx, -(dy - dh / 2));
+      drawSheet(ctx, hz.sprite, 0, dx, dy, dw, dh, seg.clip, seg.fog);
+      ctx.restore();
+    } else {
+      drawSheet(ctx, hz.sprite, 0, dx, dy, dw, dh, seg.clip, seg.fog * (hz.life < 1 ? hz.life : 1));
+    }
+
+    if (CONFIG.debug.showHitboxes) {
+      debugBox(ctx, seg, hz.offset, hz.halfWidth, hz.yBase, hz.height, '#ffd166');
+    }
+  }
+
+  function drawPlayer(ctx, game, seg, percent, curveX, cameraX, cameraY, cameraDepth) {
+    var p = game.player;
+    var sp = CONFIG.playerSprite;
+    var road = CONFIG.road;
+    var scale = cameraDepth / CONFIG.camera.backZ;
+    var roadY = U.lerp(seg.p1.world.y, seg.p2.world.y, percent);
+
+    var sx = W / 2 + scale * (curveX + p.offset * road.halfWidth - cameraX) * UNIT;
+    var groundY = HORIZON - scale * (roadY - cameraY) * UNIT;
+    var sy = groundY - scale * p.y * UNIT;
+
+    var sliding = p.state === 'slide';
+    var dw = (sliding ? sp.slideW : sp.worldW) * scale * UNIT;
+    var dh = (sliding ? sp.slideH : sp.worldH) * scale * UNIT;
+
+    // Shadow shrinks with altitude — the only readable cue for jump height.
+    var alt = U.clamp(1 - p.y / 900, 0.35, 1);
+    groundShadow(ctx, sx, groundY, dw * 0.36 * alt, 0.42 * alt);
+
+    // i-frame blink: skip alternate 60 ms windows
+    if (p.invuln > 0 && Math.floor(p.invuln * 16) % 2 === 0) return;
+
+    var key, frame;
+    if (p.state === 'hit') { key = 'cat_hit'; frame = 0; }
+    else if (p.state === 'jump') { key = 'cat_jump'; frame = p.vy > 0 ? 0 : 1; }
+    else if (sliding) { key = 'cat_slide'; frame = Assets.frameAt('cat_slide', p.animTime); }
+    else { key = 'cat_run'; frame = Assets.frameAt('cat_run', p.animTime); }
+
+    ctx.save();
+    ctx.translate(sx, sy);
+    ctx.rotate(p.lean * 0.10);      // subtle body lean into the lane change
+    ctx.translate(-sx, -sy);
+    drawSheet(ctx, key, frame, sx, sy, dw, dh);
+    ctx.restore();
+
+    if (CONFIG.debug.showHitboxes) {
+      var hw = CONFIG.player.hitboxHalfWidth * road.halfWidth * scale * UNIT;
+      var top = (sliding ? CONFIG.player.slideHeight : CONFIG.player.standHeight) * scale * UNIT;
+      ctx.strokeStyle = '#5ad1ff';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(sx - hw, sy - top, hw * 2, top);
+    }
+  }
+
+  function debugBox(ctx, seg, offset, halfWidth, yBase, height, color) {
+    var s = seg.p1.screen;
+    var cx = s.x + s.scale * offset * CONFIG.road.halfWidth * UNIT;
+    var hw = halfWidth * CONFIG.road.halfWidth * s.scale * UNIT;
+    var bottom = s.y - yBase * s.scale * UNIT;
+    var h = height * s.scale * UNIT;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(cx - hw, bottom - h, hw * 2, h);
+  }
+
+  /** Canopy shadow + edge vignette. Frames the action and hides the horizon seam. */
+  function drawVignette(ctx, game) {
+    var g = ctx.createLinearGradient(0, 0, 0, H * 0.30);
+    g.addColorStop(0, 'rgba(8,20,14,0.85)');
+    g.addColorStop(1, 'rgba(8,20,14,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H * 0.30);
+
+    var g2 = ctx.createLinearGradient(0, H * 0.80, 0, H);
+    g2.addColorStop(0, 'rgba(8,20,14,0)');
+    g2.addColorStop(1, 'rgba(8,20,14,0.55)');
+    ctx.fillStyle = g2;
+    ctx.fillRect(0, H * 0.80, W, H * 0.20);
+
+    if (game.hitFlash > 0) {
+      ctx.fillStyle = 'rgba(190,40,40,' + (game.hitFlash * 0.45).toFixed(3) + ')';
+      ctx.fillRect(0, 0, W, H);
+    }
+  }
+
+  FA.Renderer = Renderer;
+})(window.FA = window.FA || {});
+
+/* ===== src/hud.js ==================================================== */
+/* =============================================================================
+ * hud.js — heads-up display, drawn on the canvas so it scales with the stage.
+ *
+ * The signature element is the trail bar: rather than a bare countdown, the
+ * level timer reads as a path with the cat advancing toward the tree line at
+ * the far end. The fiction of the mode ("survive until you're out of the
+ * forest") is the progress indicator.
+ * ========================================================================== */
+(function (FA) {
+  'use strict';
+
+  var CONFIG = FA.CONFIG;
+  var U = FA.Utils;
+  var W = CONFIG.view.designWidth;
+
+  var SAFE_TOP = 16;          // leaves room under a notch / Dynamic Island
+  var INK = '#f4ead6';
+  var INK_DIM = 'rgba(244,234,214,0.62)';
+  var BARK = 'rgba(24,38,28,0.72)';
+  var AMBER = '#f2b544';
+  var LEAF = '#7fc46a';
+
+  function pill(ctx, x, y, w, h, fill) {
+    var r = h / 2;
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function heart(ctx, cx, cy, s, fill) {
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy + s * 0.75);
+    ctx.bezierCurveTo(cx - s * 1.35, cy - s * 0.25, cx - s * 0.5, cy - s * 1.1, cx, cy - s * 0.35);
+    ctx.bezierCurveTo(cx + s * 0.5, cy - s * 1.1, cx + s * 1.35, cy - s * 0.25, cx, cy + s * 0.75);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function pawIcon(ctx, cx, cy, s, fill) {
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + s * 0.30, s * 0.62, s * 0.48, 0, 0, Math.PI * 2);
+    ctx.fill();
+    for (var i = 0; i < 3; i++) {
+      ctx.beginPath();
+      ctx.ellipse(cx + (i - 1) * s * 0.46, cy - s * 0.42, s * 0.20, s * 0.26, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  var HUD = {
+    render: function (ctx, game) {
+      ctx.save();
+      ctx.textBaseline = 'middle';
+
+      trailBar(ctx, game);
+      scoreBlock(ctx, game);
+      statusRow(ctx, game);
+
+      if (game.state === 'intro') banner(ctx, game);
+      if (CONFIG.debug.showFPS) {
+        ctx.textAlign = 'left';
+        ctx.font = '600 11px ' + FA.FONT_UI;
+        ctx.fillStyle = INK_DIM;
+        ctx.fillText(FA.t('hudFps', { fps: Math.round(game.fps) }), 12, CONFIG.view.designHeight - 14);
+      }
+
+      ctx.restore();
+    }
+  };
+
+  /* -------------------------------------------- the trail / level progress */
+  function trailBar(ctx, game) {
+    var x = 44, w = W - 88, y = SAFE_TOP + 10, h = 7;
+    var progress = U.clamp(1 - game.timeLeft / CONFIG.level.durationSec, 0, 1);
+
+    pill(ctx, x, y, w, h, 'rgba(18,30,22,0.7)');
+    pill(ctx, x, y, Math.max(h, w * progress), h, progress > 0.88 ? LEAF : AMBER);
+
+    // start of the trail: dense trees. end of the trail: daylight.
+    ctx.fillStyle = INK_DIM;
+    ctx.beginPath();
+    ctx.moveTo(x - 20, y + h + 3); ctx.lineTo(x - 13, y - 7); ctx.lineTo(x - 6, y + h + 3);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(x - 13, y + h + 3); ctx.lineTo(x - 7, y - 4); ctx.lineTo(x - 1, y + h + 3);
+    ctx.closePath(); ctx.fill();
+
+    ctx.fillStyle = progress > 0.88 ? '#ffe9a0' : 'rgba(244,234,214,0.5)';
+    ctx.beginPath();
+    ctx.arc(x + w + 13, y + h / 2, 7, 0, Math.PI * 2);
+    ctx.fill();
+
+    // the cat, walking the bar
+    var mx = x + Math.max(h, w * progress);
+    ctx.fillStyle = INK;
+    pawIcon(ctx, mx, y + h / 2 - 1, 5.5, INK);
+
+    ctx.textAlign = 'center';
+    ctx.font = '700 10px ' + FA.FONT_DISPLAY;
+    ctx.fillStyle = INK_DIM;
+    ctx.fillText(FA.t('hudLevel', { level: game.level, count: CONFIG.level.count }) +
+                 '   ·   ' + FA.t('hudTimeLeft', { time: U.formatTime(game.timeLeft) }),
+                 W / 2, y + h + 14);
+  }
+
+  /* -------------------------------------------------------------- score */
+  function scoreBlock(ctx, game) {
+    var y = SAFE_TOP + 46;
+    ctx.textAlign = 'left';
+    ctx.font = '700 30px ' + FA.FONT_DISPLAY;
+    ctx.fillStyle = INK;
+    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+    ctx.shadowBlur = 6;
+    ctx.fillText(U.formatScore(game.score), 16, y + 14);
+    ctx.shadowBlur = 0;
+
+    if (game.combo > 1.001) {
+      ctx.font = '700 13px ' + FA.FONT_DISPLAY;
+      ctx.fillStyle = AMBER;
+      ctx.fillText(FA.t('hudChain', { combo: game.combo.toFixed(1) }), 17, y + 34);
+    }
+  }
+
+  /* ------------------------------------------------- hearts + deactivated */
+  function statusRow(ctx, game) {
+    var y = SAFE_TOP + 52;
+    var i, cx;
+
+    for (i = 0; i < CONFIG.player.maxHP; i++) {
+      cx = W - 22 - i * 24;
+      heart(ctx, cx, y, 9, i < game.player.hp ? '#e2564f' : 'rgba(244,234,214,0.22)');
+    }
+
+    var label = String(game.npcsDeactivated);
+    ctx.textAlign = 'right';
+    var textW = 26 + label.length * 8;
+    pill(ctx, W - 16 - textW, y + 18, textW, 22, BARK);
+    ctx.font = '700 12px ' + FA.FONT_DISPLAY;
+    ctx.fillStyle = INK;
+    ctx.fillText(label, W - 22, y + 30);
+    pawIcon(ctx, W - 16 - textW + 14, y + 29, 6, LEAF);
+  }
+
+  /* ------------------------------------------------------ level-start card */
+  function banner(ctx, game) {
+    var H = CONFIG.view.designHeight;
+    var t = U.clamp(game.introTimer / CONFIG.level.introSec, 0, 1);
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, t * 2.2);
+    ctx.textAlign = 'center';
+    ctx.font = '700 13px ' + FA.FONT_DISPLAY;
+    ctx.fillStyle = AMBER;
+    ctx.fillText(FA.t('introLevel', { level: game.level }), W / 2, H * 0.40);
+    ctx.font = '700 34px ' + FA.FONT_DISPLAY;
+    ctx.fillStyle = INK;
+    ctx.shadowColor = 'rgba(0,0,0,0.6)';
+    ctx.shadowBlur = 10;
+    ctx.fillText(game.levelName, W / 2, H * 0.46);
+    ctx.shadowBlur = 0;
+    ctx.font = '600 12px ' + FA.FONT_UI;
+    ctx.fillStyle = INK_DIM;
+    ctx.fillText(FA.STR.introHint, W / 2, H * 0.50);
+    ctx.restore();
+  }
+
+  FA.HUD = HUD;
+})(window.FA = window.FA || {});
+
+/* ===== src/game.js =================================================== */
+/* =============================================================================
+ * game.js — simulation and rules. No drawing, no DOM.
+ *
+ * States: title -> intro -> running -> (paused) -> levelComplete | gameOver
+ *                                                        |
+ *                                                    victory (last level)
+ *
+ * Collision model: the player owns an AABB in (offset, worldY). Every frame we
+ * walk the segments the cat *crossed* this tick — not just the one it landed
+ * on — so nothing can be tunnelled through at high speed or low frame rates.
+ * ========================================================================== */
+(function (FA) {
+  'use strict';
+
+  var CONFIG = FA.CONFIG;
+  var U = FA.Utils;
+  var Track = FA.Track;
+  var Player = FA.Player;
+  var Spawner = FA.Spawner;
+  var Entities = FA.Entities;
+  var FX = FA.FX;
+  var Audio = FA.Audio;
+
+  // Flavour text, not balance — safe to translate or replace freely.
+  var LEVEL_NAMES = FA.STR.levels;
+
+  var Game = {
+    create: function () {
+      var game = {
+        state: 'title',
+        track: null,
+        player: Player.create(),
+        fx: FX.create(),
+        spawner: null,
+        npcs: [],
+        hazards: [],
+        level: 1,
+        levelName: LEVEL_NAMES[0],
+        seed: CONFIG.debug.seed,
+        position: 0,      // absolute distance run this level (never wraps)
+        trackZ: 0,        // position wrapped into the track ring
+        absSegment: 0,
+        prevRingSeg: 0,
+        speed: 0,
+        speedMul: 1,
+        rampTimer: 0,
+        hitRecover: 0,
+        timeLeft: CONFIG.level.durationSec,
+        introTimer: 0,
+        elapsed: 0,
+        score: 0,
+        scoreAcc: 0,
+        combo: 1,
+        comboTimer: 0,
+        npcsDeactivated: 0,
+        distanceMeters: 0,
+        cameraLateral: 0,
+        skyOffset: 0,
+        treeOffset: 0,
+        hitFlash: 0,
+        fps: 60,
+        bestScore: 0,
+        lastResult: null
+      };
+      return game;
+    },
+
+    /* ------------------------------------------------------------ lifecycle */
+    startRun: function (game) {
+      game.score = 0;
+      game.scoreAcc = 0;
+      game.npcsDeactivated = 0;
+      game.distanceMeters = 0;
+      Player.reset(game.player);
+      Game.startLevel(game, 1);
+    },
+
+    startLevel: function (game, level) {
+      var s = CONFIG.speed;
+      game.level = level;
+      game.levelName = LEVEL_NAMES[(level - 1) % LEVEL_NAMES.length];
+      // Each level is its own deterministic forest.
+      game.track = Track.build(game.seed + level * 7919);
+      Spawner.decorate(game.track, game.seed + level * 7919);
+      game.spawner = Spawner.create(game, game.seed + level * 104729);
+
+      game.npcs.length = 0;
+      game.hazards.length = 0;
+      game.position = 0;
+      game.trackZ = 0;
+      game.absSegment = 0;
+      game.prevRingSeg = 0;
+      game.speedMul = Math.min(s.maxMultiplier, 1 + (level - 1) * s.levelStep);
+      game.speed = 0;
+      game.rampTimer = 0;
+      game.hitRecover = 0;
+      game.timeLeft = CONFIG.level.durationSec;
+      game.introTimer = CONFIG.level.introSec;
+      game.elapsed = 0;
+      game.combo = 1;
+      game.comboTimer = 0;
+      game.cameraLateral = 0;
+      game.hitFlash = 0;
+      game.state = 'intro';
+
+      // Populate the first stretch before the first frame is drawn.
+      Spawner.update(game.spawner, game);
+    },
+
+    togglePause: function (game) {
+      if (game.state === 'running') { game.state = 'paused'; return true; }
+      if (game.state === 'paused') { game.state = 'running'; return false; }
+      return game.state === 'paused';
+    },
+
+    pause: function (game) {
+      if (game.state === 'running') game.state = 'paused';
+    },
+
+    /* ---------------------------------------------------------------- input */
+    action: function (game, kind) {
+      if (game.state !== 'running' && game.state !== 'intro') return;
+      var wasAir = game.player.airborne;
+      var wasSlide = game.player.sliding;
+      Player.action(game.player, kind);
+      if (!wasAir && game.player.airborne) Audio.jump();
+      if (!wasSlide && game.player.sliding) Audio.slide();
+    },
+
+    /**
+     * Positional tap. Returns true if it landed on an animal (so the caller
+     * knows not to also treat it as a jump).
+     */
+    tap: function (game, x, y) {
+      if (game.state !== 'running' && game.state !== 'intro') return false;
+      var pad = CONFIG.npc.tapPaddingPx;
+      var best = null, bestArea = 0;
+
+      for (var i = 0; i < game.npcs.length; i++) {
+        var npc = game.npcs[i];
+        var b = npc.screenBox;
+        if (!b || npc.deactivated || npc.tapLock > 0) continue;
+        if (x < b.x - pad || x > b.x + b.w + pad || y < b.y - pad || y > b.y + b.h + pad) continue;
+        var area = b.w * b.h;
+        if (area > bestArea) { best = npc; bestArea = area; }   // nearest wins
+      }
+      if (!best) return false;
+
+      best.taps += 1;
+      best.tapLock = CONFIG.npc.tapCooldownSec;
+      best.flash = CONFIG.npc.hitFlashSec;
+      var bx = best.screenBox.x + best.screenBox.w / 2;
+      var by = best.screenBox.y + best.screenBox.h * 0.4;
+
+      if (best.taps >= best.tapsToStop) {
+        best.deactivated = true;
+        best.fade = 0;
+        game.npcsDeactivated += 1;
+        addScore(game, CONFIG.score.npcDeactivated, bx, by, '+' + CONFIG.score.npcDeactivated);
+        FX.burst(game.fx, bx, by, 18, '#ffe08a', { spread: 190, size: 4, life: 0.6 });
+        Audio.npcDown();
+      } else {
+        FX.burst(game.fx, bx, by, 7, '#ffffff', { spread: 120, size: 3, life: 0.35 });
+        FX.text(game.fx, bx, by, FA.t('tapsRemaining', { n: best.tapsToStop - best.taps }), '#ffffff', 12);
+        Audio.npcHit();
+      }
+      return true;
+    },
+
+    /* --------------------------------------------------------------- update */
+    update: function (game, dt) {
+      FX.update(game.fx, dt);
+      if (game.hitFlash > 0) game.hitFlash = Math.max(0, game.hitFlash - dt * 2.2);
+
+      if (game.state === 'intro') {
+        game.introTimer -= dt;
+        if (game.introTimer <= 0) game.state = 'running';
+      } else if (game.state !== 'running') {
+        return;   // paused / finished: world is frozen, FX still settle
+      }
+
+      game.elapsed += dt;
+
+      /* ---- speed: ease in at level start, dip on impact, recover */
+      var target = CONFIG.speed.base * game.speedMul;
+      game.rampTimer = Math.min(CONFIG.speed.rampUpTime, game.rampTimer + dt);
+      var ramp = U.easeOut(game.rampTimer / CONFIG.speed.rampUpTime);
+      if (game.hitRecover > 0) {
+        game.hitRecover = Math.max(0, game.hitRecover - dt);
+        var k = 1 - game.hitRecover / CONFIG.player.hitRecoverTime;
+        ramp *= U.lerp(CONFIG.player.hitSlowdown, 1, U.easeOut(k));
+      }
+      game.speed = target * ramp;
+
+      /* ---- advance along the track */
+      var moved = game.speed * dt;
+      game.position += moved;
+      game.trackZ = game.position % game.track.length;
+      game.absSegment = Math.floor(game.position / CONFIG.road.segmentLength);
+      game.distanceMeters = game.position / CONFIG.score.unitsPerMeter;
+
+      /* ---- systems */
+      Spawner.update(game.spawner, game);
+      Player.update(game.player, dt);
+      updateNPCs(game, dt);
+      updateHazards(game, dt);
+      collide(game);
+      // A fatal collision ends the run mid-tick. Bail out here rather than
+      // finishing the frame, or the passive distance score awards one last
+      // point after death and the results screen reads above the best score.
+      if (game.state !== 'running' && game.state !== 'intro') return;
+
+      /* ---- combo decay */
+      if (game.comboTimer > 0) {
+        game.comboTimer -= dt;
+        if (game.comboTimer <= 0) game.combo = 1;
+      }
+
+      /* ---- passive distance score */
+      game.scoreAcc += (moved / CONFIG.score.unitsPerMeter) * CONFIG.score.perMeter;
+      if (game.scoreAcc >= 1) {
+        var whole = Math.floor(game.scoreAcc);
+        game.score += whole;
+        game.scoreAcc -= whole;
+      }
+
+      /* ---- camera + parallax */
+      game.cameraLateral = U.damp(game.cameraLateral,
+                                  game.player.offset * CONFIG.camera.lateralFollow,
+                                  CONFIG.camera.lateralLag, dt);
+      var seg = Track.findSegment(game.track, game.trackZ);
+      var speedPercent = game.speed / CONFIG.speed.base;
+      game.skyOffset = U.wrap(game.skyOffset, seg.curve * speedPercent * dt * 0.06, 1);
+      game.treeOffset = U.wrap(game.treeOffset, seg.curve * speedPercent * dt * 0.10, 1);
+
+      /* ---- level timer */
+      if (game.state === 'running') {
+        game.timeLeft -= dt;
+        if (game.timeLeft <= 0) finishLevel(game);
+      }
+    },
+
+    /* ------------------------------------------------------------ endpoints */
+    nextLevel: function (game) {
+      if (game.level >= CONFIG.level.count) {
+        game.state = 'victory';
+        return;
+      }
+      var p = game.player;
+      p.hp = Math.min(CONFIG.player.maxHP, p.hp + CONFIG.level.heartsRestoredOnClear);
+      Game.startLevel(game, game.level + 1);
+    }
+  };
+
+  /* ========================================================================
+   * NPCs
+   * ====================================================================== */
+  function updateNPCs(game, dt) {
+    var total = game.track.segments.length;
+    var playerRing = Math.floor(game.trackZ / CONFIG.road.segmentLength);
+    var range = CONFIG.npc.activeRangeSegments;
+    var lead = CONFIG.npc.dropLeadSegments;
+    var rng = game.spawner.rng;
+
+    for (var i = 0; i < game.npcs.length; i++) {
+      var npc = game.npcs[i];
+      if (npc.tapLock > 0) npc.tapLock -= dt;
+      if (npc.flash > 0) npc.flash -= dt;
+      if (npc.deactivated) { npc.fade += dt; continue; }
+
+      // Walk across the path and turn round at the edges. Done before the
+      // range check so animals are already moving when they come into view.
+      var span = CONFIG.npc.crossRange;
+      npc.offset += npc.dir * npc.crossSpeed * dt;
+      if (npc.offset > span) { npc.offset = span; npc.dir = -1; }
+      else if (npc.offset < -span) { npc.offset = -span; npc.dir = 1; }
+
+      // How far ahead of the cat this animal is, in segments.
+      var rel = ((npc.segIndex - playerRing) % total + total) % total;
+      if (rel < range[0] || rel > range[1]) continue;
+
+      npc.dropTimer -= dt;
+      if (npc.dropTimer > 0) continue;
+      npc.dropTimer = rng.range(npc.dropIntervalSec[0], npc.dropIntervalSec[1]);
+
+      // Land it far enough ahead that it is on the ground before the cat
+      // arrives — otherwise the hazard is decoration, not a threat.
+      var fallSegments = fallDistanceSegments(game);
+      var maxLead = rel - (fallSegments + 12);
+      if (maxLead < lead[0]) continue;
+      var chosen = Math.min(rng.int(lead[0], lead[1]), maxLead);
+      var landSeg = ((npc.segIndex - chosen) % total + total) % total;
+
+      // Drop into the lane the animal is actually standing over, so the
+      // throw reads as coming from it rather than appearing at random.
+      var laneOffset;
+      if (CONFIG.npc.dropFromOwnLane) {
+        var lanes = CONFIG.player.laneOffsets, bestLane = lanes[0];
+        for (var L = 1; L < lanes.length; L++) {
+          if (Math.abs(lanes[L] - npc.offset) < Math.abs(bestLane - npc.offset)) bestLane = lanes[L];
+        }
+        laneOffset = bestLane;
+      } else {
+        laneOffset = rng.pick(CONFIG.player.laneOffsets);
+      }
+      var type = rng.pick(npc.drops);
+      var hz = Entities.hazard(type, landSeg, laneOffset);
+      Track.segmentAt(game.track, landSeg).dynamic.push(hz);
+      game.hazards.push(hz);
+    }
+  }
+
+  /** How many segments the cat covers while a hazard is in the air. */
+  function fallDistanceSegments(game) {
+    var d = CONFIG.hazardDrop;
+    var t = Math.sqrt(2 * d.startHeight / d.gravity);
+    return Math.ceil(game.speed * t / CONFIG.road.segmentLength);
+  }
+
+  /* ========================================================================
+   * Hazards
+   * ====================================================================== */
+  function updateHazards(game, dt) {
+    var d = CONFIG.hazardDrop;
+    for (var i = game.hazards.length - 1; i >= 0; i--) {
+      var hz = game.hazards[i];
+      if (!hz.landed) {
+        hz.vy -= d.gravity * dt;
+        hz.y += hz.vy * dt;
+        hz.spin += d.spinRate * dt;
+        if (hz.y <= hz.yBase) {
+          hz.y = hz.yBase;
+          hz.landed = true;
+          hz.splash = d.splashSec;
+        }
+      } else {
+        if (hz.splash > 0) hz.splash -= dt;
+        hz.life -= dt;
+        if (hz.life <= 0) removeHazard(game, hz, i);
+      }
+    }
+  }
+
+  function removeHazard(game, hz, index) {
+    game.hazards.splice(index, 1);
+    var seg = Track.segmentAt(game.track, hz.segIndex);
+    var at = seg.dynamic.indexOf(hz);
+    if (at >= 0) seg.dynamic.splice(at, 1);
+  }
+
+  /* ========================================================================
+   * Collision
+   * ====================================================================== */
+  function collide(game) {
+    var total = game.track.segments.length;
+    var ring = Math.floor(game.trackZ / CONFIG.road.segmentLength);
+    var crossed = ((ring - game.prevRingSeg) % total + total) % total;
+    // Guard against absurd deltas (a stalled tab that resumed mid-frame).
+    if (crossed > 32) crossed = 32;
+
+    for (var step = 1; step <= crossed; step++) {
+      var seg = Track.segmentAt(game.track, game.prevRingSeg + step);
+      testSegment(game, seg);
+    }
+    // Always re-test the current segment: the cat may have changed lane while
+    // sitting inside a single segment for several frames.
+    testSegment(game, Track.segmentAt(game.track, ring));
+    game.prevRingSeg = ring;
+  }
+
+  function testSegment(game, seg) {
+    var i;
+    for (i = 0; i < seg.entities.length; i++) resolve(game, seg.entities[i], seg);
+    for (i = 0; i < seg.dynamic.length; i++) {
+      if (seg.dynamic[i].landed) resolve(game, seg.dynamic[i], seg);
+    }
+  }
+
+  function resolve(game, e, seg) {
+    if (e.spent || e.kind === 'scenery' || e.kind === 'npc') return;
+
+    var p = game.player;
+    if (!U.overlap1D(Player.left(p), Player.right(p), e.offset - e.halfWidth, e.offset + e.halfWidth)) return;
+    if (!U.overlap1D(Player.bottom(p), Player.top(p), e.yBase, e.yBase + e.height)) return;
+
+    var screen = entityScreenPos(seg, e);
+
+    if (e.kind === 'pickup') {
+      e.spent = true;
+      game.combo = Math.min(CONFIG.score.comboMax, game.combo + CONFIG.score.comboStep);
+      game.comboTimer = CONFIG.score.comboWindowSec;
+      var value = Math.round(e.value * game.combo);
+      addScore(game, value, screen.x, screen.y, '+' + value);
+      FX.burst(game.fx, screen.x, screen.y, 10, pickupColor(e.type), { spread: 150, size: 3, life: 0.4 });
+      Audio.pickup(Math.round((game.combo - 1) / CONFIG.score.comboStep));
+      return;
+    }
+
+    // obstacle or hazard
+    if (!Player.canBeHit(p)) return;
+    e.spent = true;
+    var hp = Player.takeHit(p);
+    game.combo = 1;
+    game.comboTimer = 0;
+    game.hitFlash = 1;
+    game.hitRecover = CONFIG.player.hitRecoverTime;
+    FX.burst(game.fx, screen.x, screen.y, 16, '#ffb0a0', { spread: 220, size: 4, life: 0.5 });
+    Audio.hit();
+    if (hp <= 0) endRun(game);
+  }
+
+  function entityScreenPos(seg, e) {
+    // seg was projected during the last render; fall back to screen centre if
+    // this entity was never on screen (possible on the very first frame).
+    var s = seg.p1.screen;
+    if (!s || !s.scale) return { x: CONFIG.view.designWidth / 2, y: CONFIG.view.designHeight * 0.7 };
+    var unit = CONFIG.view.designWidth / 2;
+    return {
+      x: s.x + s.scale * e.offset * CONFIG.road.halfWidth * unit,
+      y: s.y - (e.yBase + e.height * 0.5) * s.scale * unit
+    };
+  }
+
+  function pickupColor(type) {
+    if (type === 'mushroom') return '#e8756a';
+    if (type === 'shrimp') return '#f6a98e';
+    return '#b79af0';
+  }
+
+  function addScore(game, amount, x, y, label) {
+    game.score += amount;
+    if (label) FX.text(game.fx, x, y, label, '#ffe9a8', 15);
+  }
+
+  /* ========================================================================
+   * Level end
+   * ====================================================================== */
+  function finishLevel(game) {
+    game.timeLeft = 0;
+    var bonus = CONFIG.score.levelCompleteBonus + game.player.hp * CONFIG.score.hpBonusPerHeart;
+    game.score += bonus;
+    game.lastResult = {
+      level: game.level,
+      levelName: game.levelName,
+      bonus: bonus,
+      hearts: game.player.hp,
+      distance: Math.round(game.distanceMeters)
+    };
+    game.state = game.level >= CONFIG.level.count ? 'victory' : 'levelComplete';
+    game.bestScore = Math.max(game.bestScore, game.score);
+    Audio.levelClear();
+  }
+
+  function endRun(game) {
+    game.state = 'gameOver';
+    game.lastResult = {
+      level: game.level,
+      levelName: game.levelName,
+      bonus: 0,
+      hearts: 0,
+      distance: Math.round(game.distanceMeters)
+    };
+    game.bestScore = Math.max(game.bestScore, game.score);
+    Audio.gameOver();
+  }
+
+  FA.Game = Game;
+  FA.LEVEL_NAMES = LEVEL_NAMES;
+})(window.FA = window.FA || {});
+
+/* ===== src/main.js =================================================== */
+/* =============================================================================
+ * main.js — bootstrap and the frame loop.
+ *
+ * Owns everything the simulation shouldn't know about: the canvas, device
+ * pixel ratio, how the fixed 390x844 stage is scaled into whatever window it
+ * finds itself in, the DOM overlays, and the optional on-screen buttons.
+ *
+ * Timing: a fixed-step accumulator. Physics always advances in 1/60 s ticks,
+ * so collision behaviour is identical on a 60 Hz phone and a 120 Hz iPad, and
+ * a stalled tab can never teleport the cat through an obstacle.
+ * ========================================================================== */
+(function (FA) {
+  'use strict';
+
+  var CONFIG = FA.CONFIG;
+  var U = FA.Utils;
+
+  var canvas, ctx, stage, overlay, game;
+  var last = 0, accumulator = 0, running = false;
+  var lastRenderedState = null;
+
+  /* ------------------------------------------------------------- canvas fit */
+  function setupCanvas() {
+    var dpr = Math.min(window.devicePixelRatio || 1, CONFIG.view.pixelRatioCap);
+    canvas.width = Math.round(CONFIG.view.designWidth * dpr);
+    canvas.height = Math.round(CONFIG.view.designHeight * dpr);
+    canvas.style.width = CONFIG.view.designWidth + 'px';
+    canvas.style.height = CONFIG.view.designHeight + 'px';
+    ctx = canvas.getContext('2d', { alpha: false });
+    // One transform, set once: every draw call downstream works in design px.
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+  }
+
+  /** Uniformly scale the fixed stage to fill the window, letterboxing around it. */
+  function fitStage() {
+    var vw = window.innerWidth;
+    var vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+    var scale = Math.min(vw / CONFIG.view.designWidth, vh / CONFIG.view.designHeight);
+    stage.style.transform = 'translate(-50%, -50%) scale(' + scale + ')';
+  }
+
+  /* ---------------------------------------------------------------- overlays */
+  var T = FA.t;
+  var isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+
+  var OVERLAY_COPY = {
+    title: function () {
+      return {
+        eyebrow: FA.STR.titleEyebrow,
+        title: FA.STR.gameTitle,
+        body: isTouch ? FA.STR.titleBody : FA.STR.titleBodyDesktop,
+        stats: FA.Scores.localBest() > 0 ? [[FA.STR.localBest, U.formatScore(FA.Scores.localBest())]] : null,
+        board: true,
+        actions: [{ label: FA.STR.start, primary: true, act: function () { FA.Game.startRun(game); } }]
+      };
+    },
+    paused: function () {
+      return {
+        eyebrow: T('pausedEyebrow', { level: game.level }),
+        title: FA.STR.paused,
+        body: FA.STR.pausedBody,
+        stats: [[FA.STR.statScore, U.formatScore(game.score)],
+                [FA.STR.statTimeLeft, U.formatTime(game.timeLeft)]],
+        actions: [
+          { label: FA.STR.resume, primary: true, act: function () { game.state = 'running'; } },
+          { label: FA.STR.restartLevel, act: function () { FA.Game.startLevel(game, game.level); } }
+        ]
+      };
+    },
+    levelComplete: function () {
+      var r = game.lastResult || {};
+      return {
+        eyebrow: r.levelName || '',
+        title: FA.STR.levelCompleteTitle,
+        body: FA.STR.levelCompleteBody,
+        stats: [
+          [FA.STR.statScore, U.formatScore(game.score)],
+          [FA.STR.statBonus, '+' + U.formatScore(r.bonus || 0)],
+          [FA.STR.statDistance, T('metres', { n: r.distance || 0 })],
+          [FA.STR.statAnimals, String(game.npcsDeactivated)]
+        ],
+        actions: [{ label: FA.STR.nextLevel, primary: true, act: function () { FA.Game.nextLevel(game); } }]
+      };
+    },
+    gameOver: function () {
+      var r = game.lastResult || {};
+      return {
+        eyebrow: T('gameOverEyebrow', { level: r.level || game.level, name: r.levelName || '' }),
+        title: FA.STR.gameOverTitle,
+        body: FA.STR.gameOverBody,
+        stats: [
+          [FA.STR.statScore, U.formatScore(game.score)],
+          [FA.STR.statBest, U.formatScore(game.bestScore)],
+          [FA.STR.statDistance, T('metres', { n: r.distance || 0 })],
+          [FA.STR.statAnimals, String(game.npcsDeactivated)]
+        ],
+        nameInput: true,
+        board: true,
+        actions: [{ label: FA.STR.runAgain, primary: true, act: function () { FA.Game.startRun(game); } }]
+      };
+    },
+    victory: function () {
+      var r = game.lastResult || {};
+      return {
+        eyebrow: T('victoryEyebrow', { count: CONFIG.level.count }),
+        title: FA.STR.victoryTitle,
+        body: FA.STR.victoryBody,
+        stats: [
+          [FA.STR.statScore, U.formatScore(game.score)],
+          [FA.STR.statBest, U.formatScore(game.bestScore)],
+          [FA.STR.statDistance, T('metres', { n: r.distance || 0 })],
+          [FA.STR.statAnimals, String(game.npcsDeactivated)]
+        ],
+        nameInput: true,
+        board: true,
+        actions: [{ label: FA.STR.victoryAgain, primary: true, act: function () { FA.Game.startRun(game); } }]
+      };
+    }
+  };
+
+  var submittedThisRun = false;
+
+  /** Name box + send button. Only shown when a board is actually configured. */
+  function renderSubmit(host, copy) {
+    host.innerHTML = '';
+    if (!copy.nameInput || !FA.Scores.isRemoteEnabled()) return;
+
+    var row = document.createElement('div');
+    row.className = 'namerow';
+
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'nameinput';
+    input.maxLength = CONFIG.leaderboard.nameMaxLength;
+    input.placeholder = FA.STR.namePlaceholder;
+    input.value = FA.Scores.playerName();
+    input.setAttribute('aria-label', FA.STR.namePlaceholder);
+
+    var send = document.createElement('button');
+    send.type = 'button';
+    send.className = 'btn btn-send';
+    send.textContent = submittedThisRun ? FA.STR.submitted : FA.STR.submitScore;
+    send.disabled = submittedThisRun;
+
+    var note = document.createElement('p');
+    note.className = 'note';
+
+    function submit() {
+      var name = FA.Scores.setPlayerName(input.value);
+      if (!name) { note.textContent = FA.STR.nameRequired; input.focus(); return; }
+      send.disabled = true;
+      send.textContent = FA.STR.submitting;
+      note.textContent = '';
+      var r = game.lastResult || {};
+      FA.Scores.submit({
+        name: name,
+        score: game.score,
+        level: r.level || game.level,
+        distance: r.distance || 0,
+        animals: game.npcsDeactivated
+      }).then(function () {
+        submittedThisRun = true;
+        send.textContent = FA.STR.submitted;
+        renderBoard(document.getElementById('ov-board'), { board: true });
+      }, function () {
+        // The run is already saved locally, so this is a soft failure.
+        send.disabled = false;
+        send.textContent = FA.STR.submitScore;
+        note.textContent = FA.STR.submitFailed;
+      });
+    }
+
+    send.addEventListener('click', submit);
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); submit(); }
+      e.stopPropagation();          // typing must not steer the cat
+    });
+
+    row.appendChild(input);
+    row.appendChild(send);
+    host.appendChild(row);
+    host.appendChild(note);
+  }
+
+  /** Top scores. Never blocks the screen: it fills in when it arrives. */
+  function renderBoard(host, copy) {
+    host.innerHTML = '';
+    if (!copy.board || !FA.Scores.isRemoteEnabled()) return;
+
+    var title = document.createElement('p');
+    title.className = 'board-title';
+    title.textContent = FA.STR.boardTitle;
+    var list = document.createElement('div');
+    list.className = 'board';
+    list.textContent = FA.STR.boardLoading;
+    host.appendChild(title);
+    host.appendChild(list);
+
+    FA.Scores.top().then(function (rows) {
+      list.textContent = '';
+      if (!rows.length) { list.textContent = FA.STR.boardEmpty; return; }
+      rows.forEach(function (r, i) {
+        var line = document.createElement('div');
+        line.className = 'board-row';
+        var rank = document.createElement('span');
+        rank.className = 'rank';
+        rank.textContent = (i + 1) + '.';
+        var name = document.createElement('span');
+        name.className = 'who';
+        name.textContent = r.name;          // textContent, never innerHTML
+        var val = document.createElement('b');
+        val.textContent = U.formatScore(r.score);
+        line.appendChild(rank);
+        line.appendChild(name);
+        line.appendChild(val);
+        list.appendChild(line);
+      });
+    }, function () {
+      list.textContent = FA.STR.boardOffline;
+    });
+  }
+
+  function showOverlay(state) {
+    var build = OVERLAY_COPY[state];
+    if (!build) { overlay.classList.add('hidden'); return; }
+    var copy = build();
+
+    overlay.querySelector('#ov-eyebrow').textContent = copy.eyebrow || '';
+    overlay.querySelector('#ov-title').textContent = copy.title;
+    overlay.querySelector('#ov-body').textContent = copy.body || '';
+
+    var statsEl = overlay.querySelector('#ov-stats');
+    statsEl.innerHTML = '';
+    (copy.stats || []).forEach(function (row) {
+      var d = document.createElement('div');
+      d.className = 'stat';
+      d.innerHTML = '<span>' + row[0] + '</span><b>' + row[1] + '</b>';
+      statsEl.appendChild(d);
+    });
+
+    renderSubmit(overlay.querySelector('#ov-submit'), copy);
+    renderBoard(overlay.querySelector('#ov-board'), copy);
+
+    var actionsEl = overlay.querySelector('#ov-actions');
+    actionsEl.innerHTML = '';
+    copy.actions.forEach(function (a) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'btn' + (a.primary ? ' btn-primary' : '');
+      b.textContent = a.label;
+      b.addEventListener('click', function () {
+        FA.Audio.unlock();
+        FA.Input.clear();
+        a.act();
+        syncOverlay(true);
+      });
+      actionsEl.appendChild(b);
+    });
+
+    overlay.classList.remove('hidden');
+  }
+
+  function syncOverlay(force) {
+    if (!force && game.state === lastRenderedState) return;
+    var entering = game.state !== lastRenderedState;
+    lastRenderedState = game.state;
+
+    if (entering && (game.state === 'gameOver' || game.state === 'victory')) {
+      FA.Scores.noteRun(game.score);
+      game.bestScore = Math.max(game.bestScore, FA.Scores.localBest());
+    }
+    if (entering && game.state === 'intro' && game.level === 1) submittedThisRun = false;
+    if (game.state === 'running' || game.state === 'intro') overlay.classList.add('hidden');
+    else showOverlay(game.state);
+    // Pause and mute only make sense while a run is live.
+    document.getElementById('system-buttons').style.display =
+      (game.state === 'running' || game.state === 'intro' || game.state === 'paused') ? 'flex' : 'none';
+  }
+
+  /* ----------------------------------------------------------- touch buttons */
+  function setupTouchButtons() {
+    var wanted = CONFIG.input.showTouchButtons;
+    var isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+    var show = wanted === true || (wanted === 'auto' && isTouch);
+    var pad = document.getElementById('touch-controls');
+    if (!show) { pad.style.display = 'none'; return; }
+
+    Array.prototype.forEach.call(pad.querySelectorAll('[data-action]'), function (el) {
+      var action = el.getAttribute('data-action');
+      // pointerdown, not click: a runner needs the input on press, not release.
+      el.addEventListener('pointerdown', function (e) {
+        e.preventDefault();
+        el.classList.add('pressed');
+        FA.Audio.unlock();
+        FA.Input.emit(action);
+      });
+      ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (evt) {
+        el.addEventListener(evt, function () { el.classList.remove('pressed'); });
+      });
+    });
+  }
+
+  function setupSystemButtons() {
+    document.getElementById('btn-pause').addEventListener('click', function () {
+      FA.Game.togglePause(game);
+      syncOverlay(true);
+    });
+    var muteBtn = document.getElementById('btn-mute');
+    muteBtn.addEventListener('click', function () {
+      var muted = FA.Audio.toggleMute();
+      muteBtn.classList.toggle('off', muted);
+      muteBtn.setAttribute('aria-label', muted ? FA.STR.a11yUnmute : FA.STR.a11yMute);
+    });
+  }
+
+  /* ---------------------------------------------------------------- the loop */
+  function frame(now) {
+    if (!running) return;
+    requestAnimationFrame(frame);
+
+    var deltaMs = Math.min(now - last, CONFIG.view.maxDeltaMs);
+    last = now;
+    var dt = deltaMs / 1000;
+    game.fps = U.damp(game.fps, dt > 0 ? 1 / dt : 60, 4, dt);
+
+    var step = CONFIG.view.fixedStep;
+    accumulator += dt;
+    var steps = 0;
+    while (accumulator >= step && steps < CONFIG.view.maxSubSteps) {
+      FA.Game.update(game, step);
+      accumulator -= step;
+      steps++;
+    }
+    // Too far behind to catch up honestly: drop the backlog rather than
+    // fast-forwarding the cat into whatever is waiting downrange.
+    if (steps === CONFIG.view.maxSubSteps) accumulator = 0;
+
+    if (game.track) {
+      FA.Renderer.render(ctx, game);
+      FA.HUD.render(ctx, game);
+    }
+    syncOverlay(false);
+  }
+
+  /* ------------------------------------------------------------------- start */
+  function boot() {
+    canvas = document.getElementById('game');
+    stage = document.getElementById('stage');
+    overlay = document.getElementById('overlay');
+
+    setupCanvas();
+    fitStage();
+    window.addEventListener('resize', fitStage);
+    window.addEventListener('orientationchange', fitStage);
+    if (window.visualViewport) window.visualViewport.addEventListener('resize', fitStage);
+
+    game = FA.Game.create();
+    FA.Scores.init();
+    game.bestScore = FA.Scores.localBest();
+
+    FA.Input.init(canvas, {
+      action: function (kind) {
+        FA.Audio.unlock();
+        FA.Game.action(game, kind);
+      },
+      tap: function (x, y) { return FA.Game.tap(game, x, y); },
+      pause: function () {
+        FA.Game.togglePause(game);
+        syncOverlay(true);
+      }
+    });
+
+    document.title = FA.STR.gameTitle;
+    var loadingEl = document.getElementById('loading');
+    if (loadingEl) loadingEl.textContent = FA.STR.loading;
+    var A11Y = { left: FA.STR.a11yLeft, right: FA.STR.a11yRight,
+                 jump: FA.STR.a11yJump, slide: FA.STR.a11ySlide };
+    Array.prototype.forEach.call(document.querySelectorAll('[data-action]'), function (b) {
+      b.setAttribute('aria-label', A11Y[b.getAttribute('data-action')] || '');
+    });
+    document.getElementById('btn-pause').setAttribute('aria-label', FA.STR.a11yPause);
+    document.getElementById('btn-mute').setAttribute('aria-label', FA.STR.a11yMute);
+
+    setupTouchButtons();
+    setupSystemButtons();
+
+    // Losing focus mid-run should never cost a life.
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) { FA.Game.pause(game); syncOverlay(true); }
+    });
+    window.addEventListener('blur', function () { FA.Game.pause(game); syncOverlay(true); });
+
+    FA.Assets.load(function () {
+      FA.Renderer.init(ctx);
+      // Build a track immediately so the title screen has a forest behind it.
+      FA.Game.startLevel(game, 1);
+      game.state = 'title';
+      document.getElementById('loading').classList.add('hidden');
+      syncOverlay(true);
+
+      running = true;
+      last = performance.now();
+      requestAnimationFrame(frame);
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+
+  // Exposed for tinkering from the console: FA.debug.game.score = 9999
+  FA.debug = { get game() { return game; } };
+})(window.FA = window.FA || {});
+
+</script>
+</body>
+</html>
